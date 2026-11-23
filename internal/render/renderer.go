@@ -9,6 +9,7 @@ import (
 	"image/png"
 	"math"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -163,39 +164,57 @@ func (r *renderer) render() error {
 		return err
 	}
 
+	bands := make([]Band, 0, len(r.report.Bands))
 	for _, band := range r.report.Bands {
 		switch band.Kind {
 		case BandPageHeader, BandColumnHeader, BandPageFooter, BandColumnFooter:
 			continue
-		case BandDetail:
-			name := bandDataSource(band)
-			if name == "" {
-				if err := r.renderFlowBand(band, ctx); err != nil {
-					return err
-				}
-				continue
+		}
+		bands = append(bands, band)
+	}
+
+	for len(bands) > 0 {
+		count, source, grouping := dataBandSection(bands)
+		section := bands[:count]
+		bands = bands[count:]
+		if source == "" {
+			if err := r.renderFlowBand(section[0], ctx); err != nil {
+				return err
 			}
-			for _, row := range r.data[name] {
-				rowCtx := cloneContext(ctx)
-				rowCtx[name] = row
-				if err := r.renderFlowBand(band, rowCtx); err != nil {
-					return err
-				}
-			}
-		case BandGroupHeader, BandGroupFooter:
-			for _, groupCtx := range r.groupContexts(band, ctx) {
-				if err := r.renderFlowBand(band, groupCtx); err != nil {
-					return err
-				}
-			}
-		default:
-			if err := r.renderFlowBand(band, ctx); err != nil {
+			continue
+		}
+		groups := [][]map[string]string{r.data[source]}
+		if grouping != nil {
+			groups = r.groupRows(*grouping, source, ctx)
+		}
+		for _, rows := range groups {
+			if err := r.renderDataBands(section, source, rows, ctx); err != nil {
 				return err
 			}
 		}
 	}
 	if err := r.pdf.Error(); err != nil {
 		return fmt.Errorf("render PDF: %w", err)
+	}
+	return nil
+}
+
+func (r *renderer) renderDataBands(bands []Band, source string, rows []map[string]string, base renderContext) error {
+	if len(rows) == 0 {
+		return nil
+	}
+	ctx := cloneContext(base)
+	for _, band := range bands {
+		bandRows := rows
+		if band.Kind != BandDetail {
+			bandRows = rows[:1]
+		}
+		for _, row := range bandRows {
+			ctx[source] = row
+			if err := r.renderFlowBand(band, ctx); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
@@ -581,33 +600,73 @@ func bandDataSource(band Band) string {
 	return ""
 }
 
-func (r *renderer) groupContexts(band Band, base renderContext) []renderContext {
-	name := bandDataSource(band)
-	if name == "" {
-		return []renderContext{base}
+func dataBandSection(bands []Band) (count int, source string, grouping *Band) {
+	switch bands[0].Kind {
+	case BandGroupHeader, BandDetail, BandGroupFooter:
+		source = bandDataSource(bands[0])
 	}
-	rows := r.data[name]
-	seen := make(map[string]bool)
-	result := make([]renderContext, 0)
-	for _, row := range rows {
-		ctx := cloneContext(base)
-		ctx[name] = row
-		key := ""
-		if band.GroupExpr != nil && strings.TrimSpace(*band.GroupExpr) != "" {
-			key = r.expand(*band.GroupExpr, ctx)
-		} else {
-			parts := make([]string, 0, len(band.GroupBy))
-			for _, field := range band.GroupBy {
-				parts = append(parts, row[field])
+	if source == "" {
+		return 1, "", nil
+	}
+	for _, kind := range []BandKind{BandGroupHeader, BandDetail, BandGroupFooter} {
+		for count < len(bands) && bands[count].Kind == kind {
+			band := &bands[count]
+			if bandDataSource(*band) != source {
+				return count, source, grouping
 			}
-			key = strings.Join(parts, "\x00")
-		}
-		if !seen[key] {
-			result = append(result, ctx)
-			seen[key] = true
+			if kind != BandDetail {
+				if grouping != nil && !sameGrouping(*grouping, *band) {
+					return count, source, grouping
+				}
+				grouping = band
+			}
+			count++
 		}
 	}
-	return result
+	return count, source, grouping
+}
+
+func groupExpression(band Band) string {
+	if band.GroupExpr != nil && strings.TrimSpace(*band.GroupExpr) != "" {
+		return *band.GroupExpr
+	}
+	return ""
+}
+
+func sameGrouping(a, b Band) bool {
+	left, right := groupExpression(a), groupExpression(b)
+	if left != "" || right != "" {
+		return left == right
+	}
+	return slices.Equal(a.GroupBy, b.GroupBy)
+}
+
+func (r *renderer) groupRows(band Band, source string, base renderContext) [][]map[string]string {
+	ctx := cloneContext(base)
+	expression := groupExpression(band)
+	positions := make(map[string]int)
+	var groups [][]map[string]string
+	for _, row := range r.data[source] {
+		var key string
+		if expression != "" {
+			ctx[source] = row
+			key = r.expand(expression, ctx)
+		} else {
+			var fields strings.Builder
+			for _, field := range band.GroupBy {
+				fields.WriteString(strconv.Quote(row[field]))
+			}
+			key = fields.String()
+		}
+		index, seen := positions[key]
+		if !seen {
+			index = len(groups)
+			positions[key] = index
+			groups = append(groups, nil)
+		}
+		groups[index] = append(groups[index], row)
+	}
+	return groups
 }
 
 func parseBinding(value string) (source, column string, ok bool) {

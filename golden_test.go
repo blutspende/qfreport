@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/xml"
 	"image"
-	"image/color"
 	"image/draw"
 	"image/png"
 	"os"
@@ -47,9 +46,6 @@ func runGoldenCase(t *testing.T, dir string, template []byte) {
 	want := readFixture(t, filepath.Join(dir, goldenFile))
 	got, err := qfreportpdf.Generate(template, data)
 	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(t.ArtifactDir(), "actual.pdf"), got, 0600); err != nil {
 		t.Fatal(err)
 	}
 	comparePDF(t, want, got)
@@ -135,41 +131,28 @@ func comparePDF(t *testing.T, want, got []byte) {
 		args := []string{"-f", page, "-l", page, "-enc", "UTF-8", "-eol", "unix", "-", "-"}
 		wantText := poppler(t, want, "pdftotext", args...)
 		gotText := poppler(t, got, "pdftotext", args...)
-		textChanged := !bytes.Equal(wantText, gotText)
-		if textChanged {
+		if !bytes.Equal(wantText, gotText) {
 			t.Errorf("page %s text differs\nwant:\n%s\ngot:\n%s", page, wantText, gotText)
 		}
 
 		ref := renderPage(t, want, page)
-		diff := renderPage(t, got, page)
-		if diff.Bounds() != ref.Bounds() {
-			t.Fatalf("page %s raster bounds: got %v, want %v", page, diff.Bounds(), ref.Bounds())
+		rendered := renderPage(t, got, page)
+		if rendered.Bounds() != ref.Bounds() {
+			t.Fatalf("page %s raster bounds: got %v, want %v", page, rendered.Bounds(), ref.Bounds())
 		}
 		bounds := ref.Bounds()
 		var changed int64
 		for y := 0; y < bounds.Dy(); y++ {
 			for x := 0; x < bounds.Dx(); x++ {
-				if diff.RGBAAt(x, y) != ref.RGBAAt(x, y) {
+				if rendered.RGBAAt(x, y) != ref.RGBAAt(x, y) {
 					changed++
-					diff.SetRGBA(x, y, color.RGBA{R: 255, A: 255})
 				}
 			}
 		}
 		total := int64(bounds.Dx()) * int64(bounds.Dy())
 		changedPercent := 100 * float64(changed) / float64(total)
-		t.Logf("page %s: %d/%d pixels differ (%.4f%%)", page, changed, total, changedPercent)
-		overLimit := changedPercent >= visualTolerancePercent
-		if overLimit {
-			t.Errorf("page %s visual difference must be below %g%%", page, visualTolerancePercent)
-		}
-		if textChanged || overLimit {
-			var output bytes.Buffer
-			if err := png.Encode(&output, diff); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(filepath.Join(t.ArtifactDir(), "diff-page-"+page+".png"), output.Bytes(), 0600); err != nil {
-				t.Fatal(err)
-			}
+		if changedPercent >= visualTolerancePercent {
+			t.Errorf("page %s visual difference: %d/%d pixels differ (%.4f%%), want below %g%%", page, changed, total, changedPercent, visualTolerancePercent)
 		}
 	}
 }

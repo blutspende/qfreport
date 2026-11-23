@@ -14,7 +14,7 @@ go get github.com/blutspende/qfreportpdf
 
 ### Prerequisite: install Poppler
 
-The golden PDF tests require a local Poppler installation with both `pdftotext` and `pdftoppm` on your `PATH`.
+The tests in `generate_test.go` and `golden_test.go` use Poppler to inspect generated PDFs.
 
 | Platform | Install command |
 | --- | --- |
@@ -55,7 +55,7 @@ go test -count=1 -v -run '^TestGolden$' .
 go test -count=1 -v -run '^TestGolden$/^labreport$/^patient$' .
 ```
 
-Page count, page dimensions in points, and extracted text on each page must match exactly. Poppler renders both PDFs at 144 DPI. Each page must have fewer than 0.01% changed pixels. A pixel counts as changed if any color channel differs. Add `-artifacts` to keep the generated PDF and highlighted differences for inspection.
+Page count, page dimensions in points, and extracted text on each page must match exactly. Poppler renders both PDFs at 144 DPI. Each page must have fewer than 0.01% changed pixels. A pixel counts as changed if any color channel differs.
 
 ## 1. Build the layout in `templateJSON`
 
@@ -108,6 +108,8 @@ Save this complete example as `template.json`:
 ```
 
 The library validates `templateJSON` against the [embedded report schema](internal/render/report.schema.json), decodes it into its internal Go report model, and checks that bindings refer to declared sources and columns.
+
+To group detail rows, place the detail bands between `groupHeader` and `groupFooter` bands that use the same data source and the same `groupBy` columns or `groupExpr`. Either group band is optional. Groups print in the order their first row appears. Within each group, rows retain their input order, and the first row supplies the bindings for the group header and footer.
 
 ## 2. Supply runtime data in `dataJSON`
 
