@@ -1,0 +1,395 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/report.schema.json",
+  "type": "object",
+  "required": ["page", "fonts", "dataSources", "bands"],
+  "additionalProperties": false,
+  "properties": {
+    "meta": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "font": { "$ref": "#/$defs/fontName" },
+        "fontSize": { "type": "number", "minimum": 1 }
+      }
+    },
+    "page": { "$ref": "#/$defs/page" },
+    "fonts": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/fontName" },
+      "additionalProperties": { "$ref": "#/$defs/font" }
+    },
+    "dataSources": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "minLength": 1 },
+      "additionalProperties": { "$ref": "#/$defs/dataSource" }
+    },
+    "bands": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/band" }
+    }
+  },
+  "$defs": {
+    "page": {
+      "type": "object",
+      "required": ["size", "orientation", "unit", "width", "height", "margin"],
+      "additionalProperties": false,
+      "properties": {
+        "size": { "enum": ["A6", "A5", "A4", "A3", "Letter", "Legal", "Tabloid", "custom"] },
+        "orientation": { "enum": ["portrait", "landscape"] },
+        "unit": { "enum": ["mm", "inch", "px"] },
+        "width": { "type": "number", "minimum": 1 },
+        "height": { "type": "number", "minimum": 1 },
+        "margin": {
+          "type": "object",
+          "required": ["top", "right", "bottom", "left"],
+          "additionalProperties": false,
+          "properties": {
+            "top": { "type": "number" },
+            "right": { "type": "number" },
+            "bottom": { "type": "number" },
+            "left": { "type": "number" }
+          }
+        }
+      }
+    },
+    "font": {
+      "type": "object",
+      "required": ["url"],
+      "additionalProperties": false,
+      "properties": {
+        "url": { "type": "string", "minLength": 1, "format": "uri" }
+      }
+    },
+    "dataSource": {
+      "type": "object",
+      "required": ["kind", "columns"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "enum": ["table"] },
+        "source": { "enum": ["memory", "csv"], "default": "memory" },
+        "csvFileName": { "type": "string" },
+        "embed": { "type": "boolean", "default": true },
+        "columns": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/column" }
+        },
+        "samples": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+          }
+        }
+      }
+    },
+    "column": {
+      "type": "object",
+      "required": ["name", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "type": {
+          "enum": ["string", "decimal", "integer", "boolean", "date", "expression", "uuidv4"]
+        }
+      }
+    },
+    "band": {
+      "type": "object",
+      "required": ["id", "kind", "height", "elements"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "kind": {
+          "enum": [
+            "title",
+            "reportHeader",
+            "pageHeader",
+            "columnHeader",
+            "groupHeader",
+            "detail",
+            "child",
+            "groupFooter",
+            "columnFooter",
+            "pageFooter",
+            "reportFooter"
+          ]
+        },
+        "height": { "type": "number", "minimum": 1 },
+        "effectiveHeight": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Inner usable height of the band (height minus header)."
+        },
+        "dataSource": { "type": ["string", "null"] },
+        "groupBy": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "groupExpr": { "type": ["string", "null"] },
+        "elements": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/element" }
+        }
+      },
+      "if": { "properties": { "kind": { "enum": ["groupHeader", "groupFooter"] } } },
+      "then": {
+        "anyOf": [
+          { "required": ["groupBy"] },
+          { "required": ["groupExpr"], "properties": { "groupExpr": { "type": "string", "minLength": 1 } } }
+        ]
+      }
+    },
+    "elementBase": {
+      "type": "object",
+      "required": ["id", "name", "type", "rect", "style"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "type": {
+          "enum": ["text", "barcode", "image", "line", "rect"]
+        },
+        "autoSize": { "type": "boolean" },
+        "proportionalScaling": { "type": "boolean" },
+        "horizontalAlign": { "enum": ["start", "center", "end"] },
+        "verticalAlign": { "enum": ["start", "center", "end"] },
+        "wordWrap": { "type": "boolean" },
+        "rotation": { "type": "number", "minimum": 0, "maximum": 360 },
+        "rotationPoint": {
+          "type": "object",
+          "required": ["x", "y"],
+          "additionalProperties": false,
+          "properties": {
+            "x": { "type": "number" },
+            "y": { "type": "number" }
+          }
+        },
+        "rect": {
+          "type": "object",
+          "required": ["x", "y", "w", "h"],
+          "additionalProperties": false,
+          "properties": {
+            "x": { "type": "number" },
+            "y": { "type": "number" },
+            "w": { "type": "number", "minimum": 0 },
+            "h": { "type": "number", "minimum": 0 }
+          }
+        },
+        "style": { "$ref": "#/$defs/style" }
+      }
+    },
+    "element": {
+      "unevaluatedProperties": false,
+      "oneOf": [
+        { "$ref": "#/$defs/textElement" },
+        { "$ref": "#/$defs/barcodeElement" },
+        { "$ref": "#/$defs/imageElement" },
+        { "$ref": "#/$defs/lineElement" },
+        { "$ref": "#/$defs/rectElement" }
+      ]
+    },
+    "textElement": {
+      "allOf": [
+        { "$ref": "#/$defs/elementBase" },
+        {
+          "properties": {
+            "type": { "const": "text" },
+            "binding": { "type": "string" },
+            "text": { "type": "string" },
+            "expression": { "type": "string" },
+            "url": { "type": "string", "format": "uri" }
+          },
+          "anyOf": [{ "required": ["text"] }, { "required": ["binding"] }, { "required": ["expression"] }]
+        }
+      ]
+    },
+    "barcodeElement": {
+      "required": ["barcodeType"],
+      "allOf": [
+        { "$ref": "#/$defs/elementBase" },
+        {
+          "properties": {
+            "type": { "const": "barcode" },
+            "binding": { "type": "string" },
+            "text": { "type": "string" },
+            "expression": { "type": "string" },
+            "barcodeType": {
+              "enum": [
+                "CODE128",
+                "CODE128A",
+                "CODE128B",
+                "CODE128C",
+                "EAN13",
+                "UPC",
+                "EAN8",
+                "EAN5",
+                "EAN2",
+                "CODE39",
+                "ITF",
+                "ITF-14",
+                "MSI",
+                "MSI10",
+                "MSI11",
+                "MSI1010",
+                "MSI1110",
+                "Pharmacode",
+                "Codabar"
+              ]
+            },
+            "url": { "type": "string", "format": "uri" }
+          },
+          "anyOf": [{ "required": ["text"] }, { "required": ["binding"] }, { "required": ["expression"] }]
+        }
+      ]
+    },
+    "imageElement": {
+      "allOf": [
+        { "$ref": "#/$defs/elementBase" },
+        {
+          "properties": {
+            "type": { "const": "image" },
+            "image": { "$ref": "#/$defs/image" },
+            "url": { "type": "string", "format": "uri" }
+          },
+          "anyOf": [{ "required": ["image"] }, { "required": ["url"] }]
+        }
+      ]
+    },
+    "lineElement": {
+      "allOf": [
+        { "$ref": "#/$defs/elementBase" },
+        {
+          "properties": {
+            "type": { "const": "line" },
+            "points": {
+              "type": "object",
+              "required": ["x1", "y1", "x2", "y2"],
+              "additionalProperties": false,
+              "properties": {
+                "x1": { "type": "number" },
+                "y1": { "type": "number" },
+                "x2": { "type": "number" },
+                "y2": { "type": "number" }
+              }
+            }
+          },
+          "required": ["points"]
+        }
+      ]
+    },
+    "rectElement": {
+      "allOf": [
+        { "$ref": "#/$defs/elementBase" },
+        { "properties": { "type": { "const": "rect" } } }
+      ]
+    },
+    "image": {
+      "type": "object",
+      "required": ["mime", "data"],
+      "additionalProperties": false,
+      "properties": {
+        "mime": {
+          "enum": ["image/png", "image/jpeg", "image/svg+xml"]
+        },
+        "data": {
+          "type": "string",
+          "minLength": 1,
+          "contentEncoding": "base64"
+        }
+      }
+    },
+    "fontName": {
+      "type": "string",
+      "enum": [
+        "Times New Roman",
+        "Georgia",
+        "EB Garamond",
+        "Cormorant Garamond",
+        "Merriweather",
+        "Lora",
+        "Playfair Display",
+        "Helvetica",
+        "Arial",
+        "Verdana",
+        "Roboto",
+        "Open Sans",
+        "Inter",
+        "Source Sans Pro",
+        "Montserrat",
+        "Nunito",
+        "Nunito Sans",
+        "Poppins",
+        "Work Sans",
+        "Courier New",
+        "Consolas",
+        "Roboto Mono",
+        "Inconsolata",
+        "Fira Code",
+        "Source Code Pro",
+        "Oswald",
+        "Raleway",
+        "Rubik",
+        "Bebas Neue",
+        "Play",
+        "Dancing Script",
+        "Pacifico",
+        "Great Vibes",
+        "Satisfy",
+        "Font Awesome Free",
+        "Material Icons",
+        "Feather Icons",
+        "Ionicons",
+        "Octicons",
+        "Nerd Fonts (Symbols)",
+        "Noto Sans",
+        "Noto Serif",
+        "Roboto Variable",
+        "Inter Variable"
+      ]
+    },
+    "style": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "font": { "$ref": "#/$defs/fontName" },
+        "size": { "type": "number", "minimum": 1 },
+        "bold": { "type": "boolean" },
+        "italic": { "type": "boolean" },
+        "underline": { "type": "boolean" },
+        "align": { "enum": ["left", "center", "right"] },
+        "strokeWidth": { "type": "number", "minimum": 1 },
+        "strokeStyle": { "enum": ["solid", "dotted", "dashed", "dashdot", "double"] },
+        "border": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "top": { "type": "boolean" },
+            "right": { "type": "boolean" },
+            "bottom": { "type": "boolean" },
+            "left": { "type": "boolean" },
+            "color": {
+              "type": "string",
+              "pattern": "^(#([0-9a-fA-F]{6})|transparent)$"
+            },
+            "strokeStyle": { "enum": ["solid", "dotted", "dashed", "dashdot", "double"] }
+          }
+        },
+        "fgColor": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{6})|transparent)$"
+        },
+        "bgColor": {
+          "type": "string",
+          "pattern": "^(#([0-9a-fA-F]{6})|transparent)$"
+        }
+      }
+    }
+  }
+}
