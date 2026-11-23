@@ -1,0 +1,73 @@
+{
+  "order": [
+    {
+      "reference": "TEST-REPORT-001",
+      "collected": "2026-11-23 08:15",
+      "donorNumber": "DN312321",
+      "sender": "Example Donor Clinic",
+      "printDate": "2026-11-23",
+      "subjectLabel": "Donor number:"
+    }
+  ],
+  "results": [
+    {
+      "sampleHeading": "Sample code: TEST-EDTA-001"
+    },
+    {
+      "code": "HGB",
+      "value": "142",
+      "unit": "g/L",
+      "resultTime": "2026-11-23 10:30"
+    },
+    {
+      "code": "PLT",
+      "value": "245",
+      "unit": "10^9/L",
+      "resultTime": "2026-11-23 10:30"
+    },
+    {
+      "sampleHeading": "Sample code: TEST-SERUM-002"
+    },
+    {
+      "code": "NA",
+      "value": "139",
+      "unit": "mmol/L",
+      "resultTime": "2026-11-23 10:30"
+    },
+    {
+      "code": "K",
+      "value": "4.2",
+      "unit": "mmol/L",
+      "resultTime": "2026-11-23 10:30"
+    },
+    {
+      "code": "CREA",
+      "value": "82",
+      "unit": "µmol/L",
+      "resultTime": "2026-11-23 10:30"
+    },
+    {
+      "sampleHeading": "Sample code: TEST-URINE-003"
+    },
+    {
+      "code": "U-PH",
+      "value": "6.0",
+      "resultTime": "2026-11-23 10:30"
+    },
+    {
+      "code": "U-SG",
+      "value": "1.015",
+      "resultTime": "2026-11-23 10:30"
+    },
+    {
+      "code": "U-GLU",
+      "value": "Negative",
+      "resultTime": "2026-11-23 10:30"
+    },
+    {
+      "code": "U-PRO",
+      "value": "Trace",
+      "resultTime": "2026-11-23 10:30"
+    }
+  ]
+}

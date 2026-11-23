@@ -10,6 +10,53 @@ The minimum supported Go version is **1.26.6**.
 go get github.com/blutspende/qfreportpdf
 ```
 
+## Regression testing
+
+### Prerequisite: install Poppler
+
+The golden PDF tests require a local Poppler installation with both `pdftotext` and `pdftoppm` on your `PATH`.
+
+| Platform | Install command |
+| --- | --- |
+| macOS (Homebrew) | `brew install poppler` |
+| Linux (Debian or Ubuntu) | `sudo apt update && sudo apt install poppler-utils` |
+| Linux (Fedora) | `sudo dnf install poppler-utils` |
+| Windows (PowerShell with WinGet) | `winget install --id oschwartz10612.Poppler --exact` |
+
+After installation, open a new terminal and check that both commands print a version.
+
+```sh
+pdftotext -v
+pdftoppm -v
+```
+
+### Run the golden tests
+
+The tests use the **golden file testing pattern**. Each case has an approved PDF called `golden.pdf`. The test passes the suite’s template and the case’s data to `Generate`, then compares the result with that approved PDF.
+
+```text
+testdata/
+└── labreport/
+    ├── template.json
+    ├── donor/
+    │   ├── data.json
+    │   └── golden.pdf
+    └── patient/
+        ├── data.json
+        └── golden.pdf
+```
+
+The root [golden_test.go](golden_test.go) discovers every suite and case by folder name. Each suite has one `template.json` and at least one case folder. Each case contains exactly `data.json` and `golden.pdf`. To cover another input for the same template, add a sibling case folder. To cover a different template, add a suite under `testdata/`. Review a new or intentionally changed golden PDF before committing it.
+
+From the module root, run all golden tests or select one by its folder path.
+
+```sh
+go test -count=1 -v -run '^TestGolden$' .
+go test -count=1 -v -run '^TestGolden$/^labreport$/^patient$' .
+```
+
+Page count, page dimensions in points, and extracted text on each page must match exactly. Poppler renders both PDFs at 144 DPI. Each page must have fewer than 0.01% changed pixels. A pixel counts as changed if any color channel differs. Add `-artifacts` to keep the generated PDF and highlighted differences for inspection.
+
 ## 1. Build the layout in `templateJSON`
 
 Suppose you want a list of orders with a heading and one line per order. Build the template in three steps:
