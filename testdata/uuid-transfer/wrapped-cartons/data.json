@@ -1,0 +1,49 @@
+{
+  "transfer": [
+    {
+      "id": "8fcd8472-6b90-4d37-a415-173b195ec721",
+      "date": "2026-11-24",
+      "origin": "Cedar Depot",
+      "destination": "Birch Street"
+    }
+  ],
+  "cartons": [
+    {
+      "id": "8f3814cc-79d2-4493-a5ba-4e0a3c98d701",
+      "item": "Trail bowl",
+      "notes": "Nest the bowls together and keep the paper liners in place.",
+      "units": 8
+    },
+    {
+      "id": "9ebc37d1-752b-41c7-b48f-b3673289ff02",
+      "item": "Reflective braided cotton training lead",
+      "notes": "Hang by the handle.\nKeep the tags attached.",
+      "units": 6
+    },
+    {
+      "id": "2bbd284a-e793-44e7-9e23-db3dd4193c03",
+      "item": "Sisal scratch mat",
+      "notes": "Lay flat. Store on the lower shelf.",
+      "units": 4
+    },
+    {
+      "id": "b64341bf-bbc8-43eb-8a49-f028cff65c04",
+      "item": "Glazed ceramic dish with non-slip base",
+      "notes": "Leave the cardboard dividers between the dishes. Lift the carton from the bottom and check each rim for chips before moving the dishes to the shelf.",
+      "units": 6
+    },
+    {
+      "id": "77b5e924-55cb-44cb-9245-19b946027805",
+      "item": "Telescoping feather wand with refill pack",
+      "notes": "Leave the wands extended. Pack the spare feathers in the side pocket.",
+      "units": 10
+    },
+    {
+      "id": "0bb5921e-b9d3-47ef-8c17-6f641b921806",
+      "item": "Window perch",
+      "notes": "Keep the mounting clips with the frame.",
+      "units": 2
+    },
+    {"id": "59352c94-da98-4961-9948-55e7a777da07", "item": "Catnip pillow", "notes": "Keep dry.", "units": 8}
+  ]
+}

@@ -1,0 +1,208 @@
+{
+  "defaults": {"textMode": "windows-1252"},
+  "meta": {"title": "Carton transfer"},
+  "page": {
+    "size": "custom",
+    "orientation": "portrait",
+    "unit": "mm",
+    "width": 148,
+    "height": 210,
+    "margin": {"top": 10, "right": 10, "bottom": 10, "left": 10}
+  },
+  "fonts": {},
+  "dataSources": {
+    "transfer": {
+      "kind": "table",
+      "columns": [
+        {"name": "id", "type": "uuidv4"},
+        {"name": "date", "type": "date"},
+        {"name": "origin", "type": "string"},
+        {"name": "destination", "type": "string"}
+      ]
+    },
+    "cartons": {
+      "kind": "table",
+      "columns": [
+        {"name": "id", "type": "uuidv4"},
+        {"name": "item", "type": "string"},
+        {"name": "notes", "type": "string"},
+        {"name": "units", "type": "integer"}
+      ]
+    }
+  },
+  "bands": [
+    {
+      "id": "pageHeader",
+      "kind": "pageHeader",
+      "height": 52,
+      "elements": [
+        {
+          "id": "shop",
+          "name": "Shop",
+          "type": "text",
+          "rect": {"x": 0, "y": 0, "w": 78, "h": 5},
+          "style": {"size": 9, "fgColor": "#24685F", "bold": true},
+          "text": "WILLOW CREEK PET SUPPLY"
+        },
+        {
+          "id": "title",
+          "name": "Title",
+          "type": "text",
+          "rect": {"x": 0, "y": 8, "w": 74, "h": 11},
+          "style": {"size": 22, "fgColor": "#173B3D", "bold": true},
+          "text": "Carton transfer"
+        },
+        {
+          "id": "origin",
+          "name": "Origin",
+          "type": "text",
+          "rect": {"x": 0, "y": 25, "w": 74, "h": 6},
+          "style": {"size": 10, "fgColor": "#173B3D"},
+          "text": "From   [transfer.origin]"
+        },
+        {
+          "id": "destination",
+          "name": "Destination",
+          "type": "text",
+          "rect": {"x": 0, "y": 32, "w": 74, "h": 6},
+          "style": {"size": 10, "fgColor": "#173B3D"},
+          "text": "To        [transfer.destination]"
+        },
+        {
+          "id": "reference-label",
+          "name": "Reference Label",
+          "type": "text",
+          "rect": {"x": 79, "y": 2, "w": 49, "h": 5},
+          "style": {"size": 8, "fgColor": "#24685F", "bold": true},
+          "text": "TRANSFER UUID"
+        },
+        {
+          "id": "reference",
+          "name": "Reference",
+          "type": "text",
+          "rect": {"x": 79, "y": 9, "w": 49, "h": 13},
+          "style": {"size": 9, "fgColor": "#173B3D", "font": "Courier New"},
+          "text": "[transfer.id]",
+          "wordWrap": true
+        },
+        {
+          "id": "date-label",
+          "name": "Date Label",
+          "type": "text",
+          "rect": {"x": 79, "y": 26, "w": 49, "h": 5},
+          "style": {"size": 8, "fgColor": "#24685F", "bold": true},
+          "text": "DISPATCH DATE"
+        },
+        {
+          "id": "date",
+          "name": "Date",
+          "type": "text",
+          "rect": {"x": 79, "y": 32, "w": 49, "h": 6},
+          "style": {"size": 10, "fgColor": "#173B3D"},
+          "text": "[transfer.date]"
+        }
+      ]
+    },
+    {
+      "id": "columnHeader",
+      "kind": "columnHeader",
+      "height": 10,
+      "elements": [
+        {
+          "id": "contents-label",
+          "name": "Contents Label",
+          "type": "text",
+          "rect": {"x": 0, "y": 0, "w": 64, "h": 7},
+          "style": {"size": 8, "fgColor": "#FFFFFF", "bgColor": "#24685F", "bold": true},
+          "text": "CARTON CONTENTS",
+          "verticalAlign": "center"
+        },
+        {
+          "id": "id-label",
+          "name": "Id Label",
+          "type": "text",
+          "rect": {"x": 64, "y": 0, "w": 51, "h": 7},
+          "style": {"size": 8, "fgColor": "#FFFFFF", "bgColor": "#24685F", "bold": true},
+          "text": "CARTON UUID",
+          "verticalAlign": "center"
+        },
+        {
+          "id": "qty-label",
+          "name": "Qty Label",
+          "type": "text",
+          "rect": {"x": 115, "y": 0, "w": 13, "h": 7},
+          "style": {"size": 8, "fgColor": "#FFFFFF", "bgColor": "#24685F", "align": "right", "bold": true},
+          "text": "UNITS",
+          "verticalAlign": "center"
+        }
+      ]
+    },
+    {
+      "id": "detail",
+      "kind": "detail",
+      "height": 27,
+      "dataSource": "cartons",
+      "elements": [
+        {
+          "id": "item",
+          "name": "Item",
+          "type": "text",
+          "rect": {"x": 0, "y": 2, "w": 61, "h": 6},
+          "style": {"size": 12, "fgColor": "#173B3D", "bold": true},
+          "text": "[cartons.item]",
+          "autoSize": true
+        },
+        {
+          "id": "notes",
+          "name": "Notes",
+          "type": "text",
+          "rect": {"x": 0, "y": 10, "w": 60, "h": 14},
+          "style": {"size": 9, "fgColor": "#466668"},
+          "text": "[cartons.notes]",
+          "wordWrap": true,
+          "autoSize": true
+        },
+        {
+          "id": "carton-id",
+          "name": "Carton Id",
+          "type": "text",
+          "rect": {"x": 64, "y": 2, "w": 49, "h": 13},
+          "style": {"size": 9, "fgColor": "#173B3D", "font": "Courier New"},
+          "text": "[cartons.id]",
+          "wordWrap": true
+        },
+        {
+          "id": "quantity",
+          "name": "Quantity",
+          "type": "text",
+          "rect": {"x": 115, "y": 2, "w": 13, "h": 8},
+          "style": {"size": 12, "fgColor": "#173B3D", "align": "right"},
+          "text": "[cartons.units]"
+        }
+      ]
+    },
+    {
+      "id": "pageFooter",
+      "kind": "pageFooter",
+      "height": 10,
+      "elements": [
+        {
+          "id": "footer",
+          "name": "Footer",
+          "type": "text",
+          "rect": {"x": 0, "y": 2, "w": 80, "h": 7},
+          "style": {"size": 9, "fgColor": "#466668"},
+          "text": "Receiving copy"
+        },
+        {
+          "id": "page",
+          "name": "Page",
+          "type": "text",
+          "rect": {"x": 85, "y": 2, "w": 43, "h": 7},
+          "style": {"size": 9, "fgColor": "#466668", "align": "right"},
+          "text": "Page [PAGE()] of [PAGETOTAL()]"
+        }
+      ]
+    }
+  ]
+}

@@ -4,7 +4,7 @@ Generate one PDF from two JSON documents. `templateJSON` defines the page layout
 
 ## Install
 
-The minimum supported Go version is **1.26.6**.
+The minimum supported Go version is **1.25.14**.
 
 ```sh
 go get github.com/blutspende/qfreportpdf
