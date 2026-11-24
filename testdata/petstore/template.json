@@ -1,0 +1,284 @@
+{
+  "meta": {"title": "Stock transfer manifest"},
+  "page": {
+    "size": "A4",
+    "orientation": "portrait",
+    "unit": "mm",
+    "width": 210,
+    "height": 297,
+    "margin": {"top": 12.1, "right": 12, "bottom": 12.1, "left": 12}
+  },
+  "fonts": {},
+  "dataSources": {
+    "transfer": {
+      "kind": "table",
+      "columns": [
+        {"name": "reference", "type": "string"},
+        {"name": "date", "type": "string"},
+        {"name": "origin", "type": "string"},
+        {"name": "destination", "type": "string"},
+        {"name": "binCode", "type": "string"}
+      ]
+    },
+    "stock": {
+      "kind": "table",
+      "columns": [
+        {"name": "department", "type": "string"},
+        {"name": "item", "type": "string"},
+        {"name": "pack", "type": "string"},
+        {"name": "cases", "type": "integer"},
+        {"name": "unitGTIN", "type": "string"},
+        {"name": "cartonInput", "type": "string"},
+        {"name": "cartonGTIN", "type": "string"},
+        {"name": "summary", "type": "string"}
+      ]
+    }
+  },
+  "bands": [
+    {
+      "id": "pageHeader",
+      "kind": "pageHeader",
+      "height": 33.9,
+      "elements": [
+        {
+          "id": "shop",
+          "name": "Shop",
+          "type": "text",
+          "rect": {"x": 0, "y": 0, "w": 110, "h": 5},
+          "style": {"size": 10, "fgColor": "#226B61", "bold": true},
+          "text": "WILLOW CREEK PET SUPPLY"
+        },
+        {
+          "id": "title",
+          "name": "Title",
+          "type": "text",
+          "rect": {"x": 0, "y": 6, "w": 119, "h": 11},
+          "style": {"size": 23, "fgColor": "#183B39", "bold": true},
+          "text": "Stock transfer manifest"
+        },
+        {
+          "id": "route",
+          "name": "Route",
+          "type": "text",
+          "rect": {"x": 0, "y": 20, "w": 119, "h": 6},
+          "style": {"size": 11, "fgColor": "#183B39"},
+          "text": "[transfer.origin]  to  [transfer.destination]"
+        },
+        {
+          "id": "dispatch",
+          "name": "Dispatch",
+          "type": "text",
+          "rect": {"x": 0, "y": 26, "w": 119, "h": 5},
+          "style": {"size": 9, "fgColor": "#506764"},
+          "text": "[transfer.reference]   /   [transfer.date]"
+        },
+        {
+          "id": "bin-label",
+          "name": "Bin Label",
+          "type": "text",
+          "rect": {"x": 126, "y": 0, "w": 60, "h": 5},
+          "style": {"size": 8, "fgColor": "#226B61", "bold": true, "align": "center"},
+          "text": "DISPATCH BIN"
+        },
+        {
+          "id": "bin-code",
+          "name": "Bin Code",
+          "type": "barcode",
+          "rect": {"x": 134, "y": 6, "w": 44, "h": 13},
+          "style": {},
+          "barcodeType": "EAN8",
+          "binding": "transfer.binCode"
+        },
+        {
+          "id": "bin-number",
+          "name": "Bin Number",
+          "type": "text",
+          "rect": {"x": 126, "y": 21, "w": 60, "h": 6},
+          "style": {"size": 10, "fgColor": "#183B39", "align": "center"},
+          "text": "[transfer.binCode]"
+        }
+      ]
+    },
+    {
+      "id": "columnHeader",
+      "kind": "columnHeader",
+      "height": 9.1,
+      "elements": [
+        {
+          "id": "item-label",
+          "name": "Item Label",
+          "type": "text",
+          "rect": {"x": 0, "y": 0, "w": 68, "h": 7},
+          "style": {"size": 8, "fgColor": "#FFFFFF", "bold": true, "bgColor": "#226B61"},
+          "verticalAlign": "center",
+          "text": "ITEM / PACK SIZE"
+        },
+        {
+          "id": "qty-label",
+          "name": "Qty Label",
+          "type": "text",
+          "rect": {"x": 68, "y": 0, "w": 18, "h": 7},
+          "style": {"size": 8, "fgColor": "#FFFFFF", "bold": true, "bgColor": "#226B61", "align": "center"},
+          "verticalAlign": "center",
+          "text": "CASES"
+        },
+        {
+          "id": "retail-label",
+          "name": "Retail Label",
+          "type": "text",
+          "rect": {"x": 86, "y": 0, "w": 45, "h": 7},
+          "style": {"size": 8, "fgColor": "#FFFFFF", "bold": true, "bgColor": "#226B61", "align": "center"},
+          "verticalAlign": "center",
+          "text": "RETAIL UNIT"
+        },
+        {
+          "id": "carton-label",
+          "name": "Carton Label",
+          "type": "text",
+          "rect": {"x": 131, "y": 0, "w": 55, "h": 7},
+          "style": {"size": 8, "fgColor": "#FFFFFF", "bold": true, "bgColor": "#226B61", "align": "center"},
+          "verticalAlign": "center",
+          "text": "SHIPPING CARTON"
+        }
+      ]
+    },
+    {
+      "id": "groupHeader",
+      "kind": "groupHeader",
+      "height": 10.7,
+      "dataSource": "stock",
+      "groupBy": ["department"],
+      "elements": [
+        {
+          "id": "department",
+          "name": "Department",
+          "type": "text",
+          "rect": {"x": 0, "y": 1, "w": 186, "h": 8},
+          "style": {"size": 13, "fgColor": "#183B39", "bold": true, "bgColor": "#DFECE6"},
+          "verticalAlign": "center",
+          "text": "[stock.department]"
+        }
+      ]
+    },
+    {
+      "id": "detail",
+      "kind": "detail",
+      "height": 30,
+      "dataSource": "stock",
+      "elements": [
+        {
+          "id": "name",
+          "name": "Name",
+          "type": "text",
+          "rect": {"x": 0, "y": 5, "w": 68, "h": 7},
+          "style": {"size": 12, "fgColor": "#183B39", "bold": true},
+          "text": "[stock.item]"
+        },
+        {
+          "id": "pack",
+          "name": "Pack",
+          "type": "text",
+          "rect": {"x": 0, "y": 14, "w": 68, "h": 6},
+          "style": {"size": 9, "fgColor": "#506764"},
+          "text": "[stock.pack]"
+        },
+        {
+          "id": "quantity",
+          "name": "Quantity",
+          "type": "text",
+          "rect": {"x": 68, "y": 5, "w": 18, "h": 9},
+          "style": {"size": 13, "fgColor": "#183B39", "align": "center"},
+          "text": "[stock.cases]"
+        },
+        {
+          "id": "unit-code",
+          "name": "Unit Code",
+          "type": "barcode",
+          "rect": {"x": 88, "y": 4, "w": 41, "h": 12},
+          "style": {},
+          "barcodeType": "EAN13",
+          "binding": "stock.unitGTIN"
+        },
+        {
+          "id": "unit-digits",
+          "name": "Unit Digits",
+          "type": "text",
+          "rect": {"x": 86, "y": 18, "w": 45, "h": 5},
+          "style": {"size": 8, "fgColor": "#506764", "align": "center"},
+          "text": "[stock.unitGTIN]"
+        },
+        {
+          "id": "carton-code",
+          "name": "Carton Code",
+          "type": "barcode",
+          "rect": {"x": 134, "y": 4, "w": 49, "h": 12},
+          "style": {},
+          "barcodeType": "ITF-14",
+          "binding": "stock.cartonInput"
+        },
+        {
+          "id": "carton-digits",
+          "name": "Carton Digits",
+          "type": "text",
+          "rect": {"x": 131, "y": 18, "w": 55, "h": 5},
+          "style": {"size": 8, "fgColor": "#506764", "align": "center"},
+          "text": "[stock.cartonGTIN]"
+        }
+      ]
+    },
+    {
+      "id": "groupFooter",
+      "kind": "groupFooter",
+      "height": 8.1,
+      "dataSource": "stock",
+      "groupBy": ["department"],
+      "elements": [
+        {
+          "id": "section-count",
+          "name": "Section Count",
+          "type": "text",
+          "rect": {"x": 0, "y": 0, "w": 186, "h": 6},
+          "style": {"size": 9, "fgColor": "#226B61", "bold": true, "align": "right"},
+          "text": "[stock.department]   /   [stock.summary]"
+        }
+      ]
+    },
+    {
+      "id": "columnFooter",
+      "kind": "columnFooter",
+      "height": 2.2,
+      "elements": [
+        {
+          "id": "rule",
+          "name": "Footer rule",
+          "type": "rect",
+          "rect": {"x": 0, "y": 0, "w": 186, "h": 0.4},
+          "style": {"bgColor": "#226B61", "fgColor": "#226B61"}
+        }
+      ]
+    },
+    {
+      "id": "pageFooter",
+      "kind": "pageFooter",
+      "height": 10,
+      "elements": [
+        {
+          "id": "file-ref",
+          "name": "File Ref",
+          "type": "text",
+          "rect": {"x": 0, "y": 2, "w": 120, "h": 6},
+          "style": {"size": 9, "fgColor": "#506764"},
+          "text": "Warehouse copy   /   [transfer.reference]"
+        },
+        {
+          "id": "page",
+          "name": "Page",
+          "type": "text",
+          "rect": {"x": 122, "y": 2, "w": 64, "h": 6},
+          "style": {"size": 9, "fgColor": "#183B39", "align": "right"},
+          "text": "Page [PAGE()] of [PAGETOTAL()]"
+        }
+      ]
+    }
+  ]
+}

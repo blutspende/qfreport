@@ -1,0 +1,73 @@
+{
+  "transfer": [
+    {
+      "reference": "TR-201",
+      "date": "2026-11-24",
+      "origin": "Cedar Depot",
+      "destination": "Maple Street",
+      "binCode": "20000318"
+    }
+  ],
+  "stock": [
+    {
+      "department": "Dog supplies",
+      "item": "Braided cotton lead",
+      "pack": "6 leads / case",
+      "cases": 2,
+      "unitGTIN": "2090010100010",
+      "cartonInput": "1209001010001",
+      "cartonGTIN": "12090010100017",
+      "summary": "3 items, 6 cases"
+    },
+    {
+      "department": "Cat supplies",
+      "item": "Felt mouse trio",
+      "pack": "12 sets / case",
+      "cases": 2,
+      "unitGTIN": "2090010200017",
+      "cartonInput": "1209001020001",
+      "cartonGTIN": "12090010200014",
+      "summary": "3 items, 7 cases"
+    },
+    {
+      "department": "Dog supplies",
+      "item": "Trail water bowl",
+      "pack": "8 bowls / case",
+      "cases": 1,
+      "unitGTIN": "2090010100027",
+      "cartonInput": "12090010100024",
+      "cartonGTIN": "12090010100024",
+      "summary": "3 items, 6 cases"
+    },
+    {
+      "department": "Cat supplies",
+      "item": "Sisal scratch mat",
+      "pack": "4 mats / case",
+      "cases": 3,
+      "unitGTIN": "2090010200024",
+      "cartonInput": "12090010200021",
+      "cartonGTIN": "12090010200021",
+      "summary": "3 items, 7 cases"
+    },
+    {
+      "department": "Dog supplies",
+      "item": "Canvas treat pouch",
+      "pack": "4 pouches / case",
+      "cases": 3,
+      "unitGTIN": "2090010100034",
+      "cartonInput": "1209001010003",
+      "cartonGTIN": "12090010100031",
+      "summary": "3 items, 6 cases"
+    },
+    {
+      "department": "Cat supplies",
+      "item": "Ceramic food dish",
+      "pack": "6 dishes / case",
+      "cases": 2,
+      "unitGTIN": "2090010200031",
+      "cartonInput": "1209001020003",
+      "cartonGTIN": "12090010200038",
+      "summary": "3 items, 7 cases"
+    }
+  ]
+}

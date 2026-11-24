@@ -882,26 +882,32 @@ func encodeBarcode(kind BarcodeType, content string) (barcode.Barcode, error) {
 	switch kind {
 	case BarcodeCODE128, BarcodeCODE128A, BarcodeCODE128B, BarcodeCODE128C:
 		code, err = code128.Encode(content)
-	case BarcodeEAN13, BarcodeEAN8:
-		code, err = ean.Encode(content)
-	case BarcodeUPC:
-		if len(content) == 11 || len(content) == 12 {
+	case BarcodeEAN13, BarcodeEAN8, BarcodeUPC:
+		payloadDigits := 12
+		switch kind {
+		case BarcodeEAN8:
+			payloadDigits = 7
+		case BarcodeUPC:
+			payloadDigits = 11
+		}
+		if len(content) != payloadDigits && len(content) != payloadDigits+1 {
+			err = fmt.Errorf("expected %d or %d digits", payloadDigits, payloadDigits+1)
+			break
+		}
+		if kind == BarcodeUPC {
 			content = "0" + content
 		}
 		code, err = ean.Encode(content)
-	case BarcodeEAN2, BarcodeEAN5:
-		code, err = encodeEANSupplement(content)
+	case BarcodeEAN2:
+		code, err = encodeEANSupplement(content, 2)
+	case BarcodeEAN5:
+		code, err = encodeEANSupplement(content, 5)
 	case BarcodeCODE39:
 		code, err = code39.Encode(content, false, true)
 	case BarcodeITF:
 		code, err = twooffive.Encode(content, true)
 	case BarcodeITF14:
-		if len(content) == 13 {
-			content, err = twooffive.AddCheckSum(content)
-		}
-		if err == nil {
-			code, err = twooffive.Encode(content, true)
-		}
+		code, err = encodeITF14(content)
 	case BarcodeMSI, BarcodeMSI10, BarcodeMSI11, BarcodeMSI1010, BarcodeMSI1110:
 		code, err = encodeMSI(kind, content)
 	case BarcodePharmacode:
@@ -915,6 +921,29 @@ func encodeBarcode(kind BarcodeType, content string) (barcode.Barcode, error) {
 		return nil, fmt.Errorf("encode %s barcode: %w", kind, err)
 	}
 	return code, nil
+}
+
+func encodeITF14(content string) (barcode.Barcode, error) {
+	const payloadDigits = 13
+	if (len(content) != payloadDigits && len(content) != payloadDigits+1) || strings.Trim(content, "0123456789") != "" {
+		return nil, fmt.Errorf("expected 13 or 14 digits")
+	}
+
+	sum := 0
+	for i := range payloadDigits {
+		weight := 1
+		if i%2 == 0 {
+			weight = 3
+		}
+		sum += int(content[i]-'0') * weight
+	}
+	checkDigit := byte('0' + (10-sum%10)%10)
+	if len(content) == payloadDigits {
+		content += string(checkDigit)
+	} else if content[payloadDigits] != checkDigit {
+		return nil, fmt.Errorf("invalid check digit, expected %c", checkDigit)
+	}
+	return twooffive.Encode(content, true)
 }
 
 // bitmapBarcode is a compact barcode.Barcode implementation used for schema
@@ -943,12 +972,9 @@ func barcodeFromModules(content, kind string, modules []bool) barcode.Barcode {
 	return &bitmapBarcode{Gray: canvas, content: content, kind: kind}
 }
 
-func encodeEANSupplement(content string) (barcode.Barcode, error) {
-	if len(content) != 2 && len(content) != 5 {
-		return nil, fmt.Errorf("EAN supplement requires 2 or 5 digits")
-	}
-	if strings.Trim(content, "0123456789") != "" {
-		return nil, fmt.Errorf("EAN supplement must be numeric")
+func encodeEANSupplement(content string, digits int) (barcode.Barcode, error) {
+	if len(content) != digits || strings.Trim(content, "0123456789") != "" {
+		return nil, fmt.Errorf("expected %d digits", digits)
 	}
 	left := []string{"0001101", "0011001", "0010011", "0111101", "0100011", "0110001", "0101111", "0111011", "0110111", "0001011"}
 	group := []string{"0100111", "0110011", "0011011", "0100001", "0011101", "0111001", "0000101", "0010001", "0001001", "0010111"}

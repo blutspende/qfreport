@@ -87,3 +87,48 @@ func TestGeneratePaginationReservesHeaderAndFooterSpace(t *testing.T) {
 		}
 	})
 }
+
+func TestGenerateBarcodeTypeAndCheckDigit(t *testing.T) {
+	const template = `{
+		"page":{"size":"A4","orientation":"portrait","unit":"mm","width":210,"height":297,
+			"margin":{"top":15,"right":15,"bottom":15,"left":15}},
+		"fonts":{},
+		"dataSources":{"rows":{"kind":"table","columns":[{"name":"value","type":"string"}]}},
+		"bands":[{"id":"barcodes","kind":"title","height":20,"elements":[
+			{"id":"code","name":"Code","type":"barcode","rect":{"x":0,"y":0,"w":48,"h":12},
+				"style":{},"barcodeType":%q,"text":%q}
+		]}]
+	}`
+	generate := func(kind, content string) ([]byte, error) {
+		return qfreportpdf.Generate([]byte(fmt.Sprintf(template, kind, content)), []byte(`{"rows":[]}`))
+	}
+
+	for _, tc := range []struct{ kind, content string }{
+		{"EAN13", "1234567"},
+		{"EAN8", "400638133393"},
+		{"UPC", "4006381333931"},
+		{"EAN2", "12345"},
+		{"EAN5", "12"},
+		{"ITF-14", "1234"},
+		{"ITF-14", "12345678901239"},
+	} {
+		t.Run(tc.kind+"_"+tc.content, func(t *testing.T) {
+			pdf, err := generate(tc.kind, tc.content)
+			if pdf != nil || err == nil || !strings.Contains(err.Error(), "encode "+tc.kind+" barcode:") {
+				t.Fatalf("Generate returned %d bytes and error %v, want nil PDF and a barcode encoding error", len(pdf), err)
+			}
+		})
+	}
+
+	t.Run("ITF-14 calculates the check digit", func(t *testing.T) {
+		want, err := generate("ITF-14", "12345678901231")
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := generate("ITF-14", "1234567890123")
+		if err != nil {
+			t.Fatal(err)
+		}
+		comparePDF(t, want, got)
+	})
+}

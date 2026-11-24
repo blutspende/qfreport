@@ -175,3 +175,7 @@ Only font names predefined in `$defs.fontName` in the [report schema](internal/r
 With `"fonts": {}`, the renderer maps the selected name to a built-in PDF family. To use the actual Inter typeface, set `style.font` to `"Inter"` and put the base64-encoded TrueType file in `fonts.Inter.url` with the prefix `data:font/ttf;base64,`.
 
 For an image element, set `image.mime` to `image/png`, `image/jpeg`, or `image/svg+xml`, and put the base64-encoded image bytes in `image.data`. Fonts and images are embedded in the template so rendering can run entirely in memory.
+
+## Numeric barcodes
+
+Pass barcode values as strings to preserve leading zeros. `EAN13` accepts 12 or 13 digits, `EAN8` accepts 7 or 8, `UPC` (UPC-A) accepts 11 or 12, and `ITF-14` accepts 13 or 14. The shorter form calculates the check digit. The longer form must include a valid one. `EAN2` and `EAN5` require exactly 2 and 5 digits, respectively.
