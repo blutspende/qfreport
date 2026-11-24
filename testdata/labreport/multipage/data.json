@@ -1,0 +1,221 @@
+{
+  "order": [
+    {
+      "reference": "TEST-REPORT-003",
+      "collected": "2026-11-23 08:15",
+      "sender": "Example Donor Clinic",
+      "printDate": "2026-11-23",
+      "subjectLabel": "Patient:",
+      "firstName": "Alex",
+      "lastName": "Example",
+      "birthDateLabel": "Date of birth:",
+      "dateOfBirth": "1990-06-12",
+      "genderLabel": "Gender:",
+      "gender": "male"
+    }
+  ],
+  "results": [
+    {
+      "sampleHeading": "Sample code: TEST-EDTA-001"
+    },
+    {
+      "code": "WBC",
+      "value": "6.7",
+      "unit": "10^9/L",
+      "resultTime": "2026-11-23 10:30"
+    },
+    {
+      "code": "RBC",
+      "value": "4.8",
+      "unit": "10^12/L",
+      "resultTime": "2026-11-23 10:30"
+    },
+    {
+      "code": "HGB",
+      "value": "142",
+      "unit": "g/L",
+      "resultTime": "2026-11-23 10:30"
+    },
+    {
+      "code": "HCT",
+      "value": "42",
+      "unit": "%",
+      "resultTime": "2026-11-23 10:30"
+    },
+    {
+      "code": "MCV",
+      "value": "88",
+      "unit": "fL",
+      "resultTime": "2026-11-23 10:30"
+    },
+    {
+      "code": "MCH",
+      "value": "29.6",
+      "unit": "pg",
+      "resultTime": "2026-11-23 10:30"
+    },
+    {
+      "code": "MCHC",
+      "value": "338",
+      "unit": "g/L",
+      "resultTime": "2026-11-23 10:30"
+    },
+    {
+      "code": "RDW",
+      "value": "12.8",
+      "unit": "%",
+      "resultTime": "2026-11-23 10:30"
+    },
+    {
+      "code": "PLT",
+      "value": "245",
+      "unit": "10^9/L",
+      "resultTime": "2026-11-23 10:30"
+    },
+    {
+      "code": "MPV",
+      "value": "9.7",
+      "unit": "fL",
+      "resultTime": "2026-11-23 10:30"
+    },
+    {
+      "code": "NEUT",
+      "value": "3.8",
+      "unit": "10^9/L",
+      "resultTime": "2026-11-23 10:30"
+    },
+    {
+      "code": "LYMPH",
+      "value": "2.0",
+      "unit": "10^9/L",
+      "resultTime": "2026-11-23 10:30"
+    },
+    {
+      "code": "MONO",
+      "value": "0.6",
+      "unit": "10^9/L",
+      "resultTime": "2026-11-23 10:30"
+    },
+    {
+      "code": "EOS",
+      "value": "0.2",
+      "unit": "10^9/L",
+      "resultTime": "2026-11-23 10:30"
+    },
+    {
+      "code": "BASO",
+      "value": "0.1",
+      "unit": "10^9/L",
+      "resultTime": "2026-11-23 10:30"
+    },
+    {
+      "code": "RET",
+      "value": "1.2",
+      "unit": "%",
+      "resultTime": "2026-11-23 10:30"
+    },
+    {
+      "sampleHeading": "Sample code: TEST-SERUM-002"
+    },
+    {
+      "code": "NA",
+      "value": "139",
+      "unit": "mmol/L",
+      "resultTime": "2026-11-23 10:45"
+    },
+    {
+      "code": "K",
+      "value": "4.2",
+      "unit": "mmol/L",
+      "resultTime": "2026-11-23 10:45"
+    },
+    {
+      "code": "CL",
+      "value": "102",
+      "unit": "mmol/L",
+      "resultTime": "2026-11-23 10:45"
+    },
+    {
+      "code": "CA",
+      "value": "2.35",
+      "unit": "mmol/L",
+      "resultTime": "2026-11-23 10:45"
+    },
+    {
+      "code": "MG",
+      "value": "0.85",
+      "unit": "mmol/L",
+      "resultTime": "2026-11-23 10:45"
+    },
+    {
+      "code": "PHOS",
+      "value": "1.10",
+      "unit": "mmol/L",
+      "resultTime": "2026-11-23 10:45"
+    },
+    {
+      "code": "CREA",
+      "value": "82",
+      "unit": "µmol/L",
+      "resultTime": "2026-11-23 10:45"
+    },
+    {
+      "code": "UREA",
+      "value": "5.3",
+      "unit": "mmol/L",
+      "resultTime": "2026-11-23 10:45"
+    },
+    {
+      "code": "GLU",
+      "value": "5.1",
+      "unit": "mmol/L",
+      "resultTime": "2026-11-23 10:45"
+    },
+    {
+      "code": "ALT",
+      "value": "22",
+      "unit": "U/L",
+      "resultTime": "2026-11-23 10:45"
+    },
+    {
+      "code": "AST",
+      "value": "19",
+      "unit": "U/L",
+      "resultTime": "2026-11-23 10:45"
+    },
+    {
+      "code": "ALB",
+      "value": "43",
+      "unit": "g/L",
+      "resultTime": "2026-11-23 10:45"
+    },
+    {
+      "sampleHeading": "Sample code: TEST-URINE-003"
+    },
+    {
+      "code": "U-PH",
+      "value": "6.0",
+      "resultTime": "2026-11-23 11:00"
+    },
+    {
+      "code": "U-SG",
+      "value": "1.015",
+      "resultTime": "2026-11-23 11:00"
+    },
+    {
+      "code": "U-GLU",
+      "value": "Negative",
+      "resultTime": "2026-11-23 11:00"
+    },
+    {
+      "code": "U-PRO",
+      "value": "Trace",
+      "resultTime": "2026-11-23 11:00"
+    },
+    {
+      "code": "U-KET",
+      "value": "Negative",
+      "resultTime": "2026-11-23 11:00"
+    }
+  ]
+}

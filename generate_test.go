@@ -1,6 +1,7 @@
 package qfreportpdf_test
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -44,4 +45,45 @@ func TestGenerateGroupBandOrder(t *testing.T) {
 	if !slices.Equal(got, want) {
 		t.Fatalf("grouped band order = %q, want %q", got, want)
 	}
+}
+
+func TestGeneratePaginationReservesHeaderAndFooterSpace(t *testing.T) {
+	const template = `{
+		"page":{"size":"custom","orientation":"portrait","unit":"mm","width":100,"height":140.7,
+			"margin":{"top":10.3,"right":10,"bottom":10.3,"left":10}},
+		"fonts":{},
+		"dataSources":{"rows":{"kind":"table","columns":[{"name":"value","type":"string"}]}},
+		"bands":[
+			{"id":"page-header","kind":"pageHeader","height":18.1,"elements":[]},
+			{"id":"column-header","kind":"columnHeader","height":12,"elements":[]},
+			{"id":"detail","kind":"detail","height":%d,"dataSource":"rows","elements":[
+				{"id":"value","name":"Value","type":"text","rect":{"x":0,"y":0,"w":80,"h":7},"style":{},"text":"[rows.value]"}]},
+			{"id":"column-footer","kind":"columnFooter","height":12,"elements":[]},
+			{"id":"page-footer","kind":"pageFooter","height":8,"elements":[]}
+		]
+	}`
+	data := []byte(`{"rows":[{"value":"first"},{"value":"second"}]}`)
+
+	t.Run("oversized detail", func(t *testing.T) {
+		pdf, err := qfreportpdf.Generate([]byte(fmt.Sprintf(template, 80)), data)
+		if pdf != nil || err == nil || !strings.Contains(err.Error(), `band "detail" is taller than the printable page area`) {
+			t.Fatalf("Generate returned %d bytes and error %v, want nil PDF and an oversized band error", len(pdf), err)
+		}
+	})
+
+	t.Run("exact fit on each page", func(t *testing.T) {
+		pdf, err := qfreportpdf.Generate([]byte(fmt.Sprintf(template, 70)), data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := poppler(t, pdf, "pdftotext", "-layout", "-", "-")
+		pages := strings.Split(strings.TrimSuffix(string(text), "\f"), "\f")
+		for i := range pages {
+			pages[i] = strings.TrimSpace(pages[i])
+		}
+		want := []string{"first", "second"}
+		if !slices.Equal(pages, want) {
+			t.Fatalf("pages = %q, want %q", pages, want)
+		}
+	})
 }

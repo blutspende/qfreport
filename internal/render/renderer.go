@@ -32,6 +32,9 @@ var bindingPattern = regexp.MustCompile(`\[` + bindingPath + `\]`)
 var bareBindingPattern = regexp.MustCompile(`^` + bindingPath + `$`)
 var pageAliasPattern = regexp.MustCompile(`\{(nb|[0-9]+)\}`)
 
+// Allow for floating-point rounding when a band fits exactly.
+const pageFitTolerance = 1e-9
+
 // renderContext holds one current row per data source. While drawing an order,
 // ctx["orders"]["quantity"] reads the quantity from that order.
 type renderContext map[string]map[string]string
@@ -40,10 +43,9 @@ type renderer struct {
 	report        Report
 	pdf           *fpdf.Fpdf
 	scale         float64
-	pageHeight    float64
+	contentTop    float64
 	contentY      float64
 	contentBottom float64
-	footerHeight  float64
 	customFonts   map[FontName]bool
 	data          map[string][]map[string]string // All rows per source in input order, with display text keyed by column.
 	pageAlias     string
@@ -111,7 +113,6 @@ func newRenderer(report Report, data map[string][]map[string]string) (*renderer,
 		report:      report,
 		pdf:         pdf,
 		scale:       scale,
-		pageHeight:  height,
 		customFonts: make(map[FontName]bool),
 		data:        data,
 		pageAlias:   pageAlias,
@@ -119,10 +120,18 @@ func newRenderer(report Report, data map[string][]map[string]string) (*renderer,
 	if err := r.loadFonts(); err != nil {
 		return nil, err
 	}
+	r.contentTop = r.u(report.Page.Margin.Top)
+	r.contentBottom = height - r.u(report.Page.Margin.Bottom)
 	for _, band := range report.Bands {
-		if band.Kind == BandPageFooter || band.Kind == BandColumnFooter {
-			r.footerHeight += r.u(band.Height)
+		switch band.Kind {
+		case BandPageHeader, BandColumnHeader:
+			r.contentTop += r.u(band.Height)
+		case BandPageFooter, BandColumnFooter:
+			r.contentBottom -= r.u(band.Height)
 		}
+	}
+	if r.contentTop > r.contentBottom+pageFitTolerance {
+		return nil, fmt.Errorf("page margins, headers, and footers exceed the page height")
 	}
 	return r, nil
 }
@@ -221,19 +230,19 @@ func (r *renderer) renderDataBands(bands []Band, source string, rows []map[strin
 
 func (r *renderer) addPage(ctx renderContext) error {
 	r.pdf.AddPage()
-	r.contentY = r.u(r.report.Page.Margin.Top)
-	r.contentBottom = r.pageHeight - r.u(r.report.Page.Margin.Bottom) - r.footerHeight
+	r.contentY = r.contentTop
 
+	headerY := r.u(r.report.Page.Margin.Top)
 	for _, band := range r.report.Bands {
 		if band.Kind == BandPageHeader || band.Kind == BandColumnHeader {
-			if err := r.renderBandAt(band, r.contentY, ctx); err != nil {
+			if err := r.renderBandAt(band, headerY, ctx); err != nil {
 				return err
 			}
-			r.contentY += r.u(band.Height)
+			headerY += r.u(band.Height)
 		}
 	}
 
-	footerY := r.pageHeight - r.u(r.report.Page.Margin.Bottom) - r.footerHeight
+	footerY := r.contentBottom
 	for _, band := range r.report.Bands {
 		if band.Kind == BandColumnFooter || band.Kind == BandPageFooter {
 			if err := r.renderBandAt(band, footerY, ctx); err != nil {
@@ -247,13 +256,14 @@ func (r *renderer) addPage(ctx renderContext) error {
 
 func (r *renderer) renderFlowBand(band Band, ctx renderContext) error {
 	height := r.u(band.Height)
-	if r.contentY+height > r.contentBottom && r.contentY > r.u(r.report.Page.Margin.Top) {
+	bottom := r.contentBottom + pageFitTolerance
+	if r.contentTop+height > bottom {
+		return fmt.Errorf("band %q is taller than the printable page area", band.ID)
+	}
+	if r.contentY+height > bottom {
 		if err := r.addPage(ctx); err != nil {
 			return err
 		}
-	}
-	if height > r.contentBottom-r.u(r.report.Page.Margin.Top) {
-		return fmt.Errorf("band %q is taller than the printable page area", band.ID)
 	}
 	if err := r.renderBandAt(band, r.contentY, ctx); err != nil {
 		return err
