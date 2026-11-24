@@ -4,7 +4,8 @@
   },
   "defaults": {
     "font": "Arial",
-    "fontSize": 16
+    "fontSize": 16,
+    "textMode": "windows-1252"
   },
   "page": {
     "size": "A4",

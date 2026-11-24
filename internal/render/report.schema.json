@@ -14,7 +14,8 @@
       "additionalProperties": false,
       "properties": {
         "font": { "$ref": "#/$defs/fontName" },
-        "fontSize": { "type": "number", "minimum": 1 }
+        "fontSize": { "type": "number", "minimum": 1 },
+        "textMode": { "enum": ["unicode", "windows-1252"], "default": "unicode" }
       }
     },
     "page": { "$ref": "#/$defs/page" },

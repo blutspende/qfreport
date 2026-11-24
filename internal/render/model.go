@@ -13,6 +13,7 @@ type Report struct {
 type Defaults struct {
 	Font     FontName `json:"font,omitempty"`
 	FontSize float64  `json:"fontSize,omitempty"`
+	TextMode TextMode `json:"textMode,omitempty"`
 }
 
 type Page struct {
@@ -131,6 +132,7 @@ type PageSize string
 type Orientation string
 type Unit string
 type FontName string
+type TextMode string
 type DataSourceKind string
 type ColumnType string
 type BandKind string
@@ -141,6 +143,11 @@ type BarcodeType string
 type ImageMIME string
 type TextAlign string
 type StrokeStyle string
+
+const (
+	TextModeUnicode     TextMode = "unicode"
+	TextModeWindows1252 TextMode = "windows-1252"
+)
 
 const (
 	PageSizeA6      PageSize = "A6"

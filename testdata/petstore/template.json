@@ -1,5 +1,6 @@
 {
   "meta": {"title": "Stock transfer manifest"},
+  "defaults": {"textMode": "windows-1252"},
   "page": {
     "size": "A4",
     "orientation": "portrait",

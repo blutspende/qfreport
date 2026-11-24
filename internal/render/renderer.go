@@ -22,7 +22,12 @@ import (
 	"github.com/go-pdf/fpdf"
 	"github.com/srwiley/oksvg"
 	"github.com/srwiley/rasterx"
+	"golang.org/x/image/font/gofont/gobold"
+	"golang.org/x/image/font/gofont/gobolditalic"
+	"golang.org/x/image/font/gofont/goitalic"
+	"golang.org/x/image/font/gofont/goregular"
 	"golang.org/x/image/font/sfnt"
+	"golang.org/x/text/encoding/charmap"
 )
 
 // Columns may be named with dotted paths. Each is a literal key in the row.
@@ -35,6 +40,8 @@ var pageAliasPattern = regexp.MustCompile(`\{(nb|[0-9]+)\}`)
 // Allow for floating-point rounding when a band fits exactly.
 const pageFitTolerance = 1e-9
 
+const bundledFontFamily = "go-unicode"
+
 // renderContext holds one current row per data source. While drawing an order,
 // ctx["orders"]["quantity"] reads the quantity from that order.
 type renderContext map[string]map[string]string
@@ -43,10 +50,12 @@ type renderer struct {
 	report        Report
 	pdf           *fpdf.Fpdf
 	scale         float64
+	textMode      TextMode
 	contentTop    float64
 	contentY      float64
 	contentBottom float64
 	customFonts   map[FontName]bool
+	bundledFonts  map[string]*sfnt.Font
 	data          map[string][]map[string]string // All rows per source in input order, with display text keyed by column.
 	pageAlias     string
 	resourceID    int
@@ -113,9 +122,13 @@ func newRenderer(report Report, data map[string][]map[string]string) (*renderer,
 		report:      report,
 		pdf:         pdf,
 		scale:       scale,
+		textMode:    TextModeUnicode,
 		customFonts: make(map[FontName]bool),
 		data:        data,
 		pageAlias:   pageAlias,
+	}
+	if defaults := report.Defaults; defaults != nil && defaults.TextMode != "" {
+		r.textMode = defaults.TextMode
 	}
 	if err := r.loadFonts(); err != nil {
 		return nil, err
@@ -328,26 +341,41 @@ func (r *renderer) elementText(element Element, ctx renderContext) string {
 func (r *renderer) renderText(element Element, x, y, w, h float64, ctx renderContext) error {
 	text := r.elementText(element, ctx)
 
-	font, custom := r.fontFamily(element.Style.Font)
+	font, unicodeFont := r.fontFamily(element.Style.Font)
 	size := r.fontSize(element.Style)
 	style := fontStyle(element.Style)
+	if !unicodeFont && r.textMode != TextModeWindows1252 {
+		if err := r.useBundledFont(style, text); err != nil {
+			return err
+		}
+		font, unicodeFont = bundledFontFamily, true
+	}
+	if !unicodeFont {
+		var encoded strings.Builder
+		encoded.Grow(len(text))
+		for _, ch := range text {
+			value, ok := charmap.Windows1252.EncodeRune(ch)
+			if !ok {
+				return fmt.Errorf("built-in font %q cannot render %U in windows-1252 mode", font, ch)
+			}
+			encoded.WriteByte(value)
+		}
+		text = encoded.String()
+	}
 	r.pdf.SetFont(font, style, size)
 	if err := r.pdf.Error(); err != nil {
 		return fmt.Errorf("set font %q: %w", font, err)
 	}
-	if !custom {
-		text = r.pdf.UnicodeTranslatorFromDescriptor("")(text)
-	}
 
 	wordWrap := element.WordWrap != nil && *element.WordWrap
 	if element.AutoSize != nil && *element.AutoSize {
-		for size > 4 && !r.textFits(text, w, h, wordWrap, custom) {
+		for size > 4 && !r.textFits(text, w, h, wordWrap, unicodeFont) {
 			size -= 0.5
 			r.pdf.SetFont(font, style, size)
 		}
 	}
 	lineHeight := r.pdf.PointConvert(size) * 1.2
-	lines := r.textLines(text, w, wordWrap, custom)
+	lines := r.textLines(text, w, wordWrap, unicodeFont)
 	blockHeight := float64(len(lines)) * lineHeight
 	textY := y
 	switch element.VerticalAlign {
@@ -493,6 +521,60 @@ func (r *renderer) renderBarcode(element Element, x, y, w, h float64, ctx render
 	return r.renderRaster(data.Bytes(), "PNG", x, y, w, h, false)
 }
 
+func (r *renderer) useBundledFont(style, text string) error {
+	face := strings.TrimSuffix(style, "U")
+	font := r.bundledFonts[face]
+	if font == nil {
+		data := goregular.TTF
+		switch face {
+		case "B":
+			data = gobold.TTF
+		case "I":
+			data = goitalic.TTF
+		case "BI":
+			data = gobolditalic.TTF
+		}
+		var err error
+		font, err = sfnt.Parse(data)
+		if err != nil {
+			return fmt.Errorf("parse bundled Go font: %w", err)
+		}
+		r.addUnicodeFont(bundledFontFamily, face, data)
+		if err := r.pdf.Error(); err != nil {
+			return fmt.Errorf("register bundled Go font: %w", err)
+		}
+		if r.bundledFonts == nil {
+			r.bundledFonts = make(map[string]*sfnt.Font)
+		}
+		r.bundledFonts[face] = font
+	}
+
+	var buffer sfnt.Buffer
+	for _, ch := range text {
+		switch ch {
+		case '\r', '\n', '\t':
+			continue
+		}
+		glyph, err := font.GlyphIndex(&buffer, ch)
+		if err != nil {
+			return fmt.Errorf("look up bundled Go font glyph %U: %w", ch, err)
+		}
+		if glyph == 0 {
+			return fmt.Errorf("bundled Go font cannot render %U", ch)
+		}
+	}
+	return nil
+}
+
+func (r *renderer) addUnicodeFont(family, style string, data []byte) {
+	r.pdf.AddUTF8FontFromBytes(family, style, data)
+	// shortcut: retain page-count digits via a discarded template, remove when fpdf tracks alias replacement glyphs.
+	r.pdf.CreateTemplate(func(tpl *fpdf.Tpl) {
+		tpl.SetFont(family, style, 10)
+		tpl.Text(0, 0, "0123456789")
+	})
+}
+
 func (r *renderer) loadFonts() error {
 	for name, definition := range r.report.Fonts {
 		mime, data, err := decodeDataURI(definition.URL)
@@ -514,7 +596,7 @@ func (r *renderer) loadFonts() error {
 		// picking the built-in font of the same name.
 		family := "embedded-" + name
 		for _, style := range []string{"", "B", "I", "BI"} {
-			r.pdf.AddUTF8FontFromBytes(family, style, data)
+			r.addUnicodeFont(family, style, data)
 			r.pdf.SetFont(family, style, 10)
 			if err := r.pdf.Error(); err != nil {
 				return fmt.Errorf("register TrueType font %q: %w", name, err)

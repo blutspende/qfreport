@@ -1,12 +1,15 @@
 package qfreportpdf_test
 
 import (
+	"bytes"
+	"encoding/base64"
 	"fmt"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/blutspende/qfreportpdf"
+	"golang.org/x/image/font/gofont/goregular"
 )
 
 func TestGenerateGroupBandOrder(t *testing.T) {
@@ -130,5 +133,93 @@ func TestGenerateBarcodeTypeAndCheckDigit(t *testing.T) {
 			t.Fatal(err)
 		}
 		comparePDF(t, want, got)
+	})
+}
+
+func TestGenerateUnicodeText(t *testing.T) {
+	const template = `{
+		"page":{"size":"A4","orientation":"portrait","unit":"mm","width":210,"height":297,
+			"margin":{"top":15,"right":15,"bottom":15,"left":15}},
+		"defaults":%s,
+		"fonts":%s,
+		"dataSources":{"people":{"kind":"table","columns":[{"name":"name","type":"string"}]}},
+		"bands":[{"id":"title","kind":"title","height":20,"elements":[
+			{"id":"name","name":"Name","type":"text","rect":{"x":0,"y":0,"w":80,"h":12},
+				"style":{"font":"Helvetica","bold":true},"text":"[people.name]"}
+		]}]
+	}`
+	const name = "Őri Gyűjtő"
+	generate := func(defaults, fonts, text string) ([]byte, error) {
+		data := []byte(fmt.Sprintf(`{"people":[{"name":%q}]}`, text))
+		return qfreportpdf.Generate([]byte(fmt.Sprintf(template, defaults, fonts)), data)
+	}
+
+	for _, tc := range []struct{ name, defaults, fontType string }{
+		{"omitted mode", `{}`, "CID TrueType"},
+		{"unicode mode", `{"textMode":"unicode"}`, "CID TrueType"},
+		{"windows-1252 mode", `{"textMode":"windows-1252"}`, "WinAnsi"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pdf, err := generate(tc.defaults, "{}", "Plain text")
+			if err != nil {
+				t.Fatal(err)
+			}
+			fonts := poppler(t, pdf, "pdffonts", "-")
+			if !strings.Contains(string(fonts), tc.fontType) {
+				t.Fatalf("fonts = %s, want %s", fonts, tc.fontType)
+			}
+		})
+	}
+
+	t.Run("unicode name", func(t *testing.T) {
+		pdf, err := generate("{}", "{}", name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := poppler(t, pdf, "pdftotext", "-enc", "UTF-8", "-", "-")
+		if got := strings.TrimSpace(string(text)); got != name {
+			t.Fatalf("rendered name = %q, want %q", got, name)
+		}
+	})
+
+	for _, tc := range []struct{ name, defaults, text, wantError string }{
+		{"missing glyph", `{}`, "Őri 中", `render band "title" element "name": bundled Go font cannot render U+4E2D`},
+		{"outside windows-1252", `{"textMode":"windows-1252"}`, name, `built-in font "Helvetica" cannot render U+0150`},
+		{"invalid mode", `{"textMode":"utf-8"}`, name, "/defaults/textMode"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pdf, err := generate(tc.defaults, "{}", tc.text)
+			if pdf != nil || err == nil || !strings.Contains(err.Error(), tc.wantError) {
+				t.Fatalf("Generate returned %d bytes and error %v, want nil PDF and %q", len(pdf), err, tc.wantError)
+			}
+		})
+	}
+
+	t.Run("embedded TrueType font", func(t *testing.T) {
+		font := "data:font/ttf;base64," + base64.StdEncoding.EncodeToString(goregular.TTF)
+		fonts := fmt.Sprintf(`{"Helvetica":{"url":%q}}`, font)
+		pdf, err := generate(`{"textMode":"windows-1252"}`, fonts, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := poppler(t, pdf, "pdftotext", "-enc", "UTF-8", "-", "-")
+		if got := strings.TrimSpace(string(text)); got != name {
+			t.Fatalf("rendered name = %q, want %q", got, name)
+		}
+	})
+
+	t.Run("page total glyph", func(t *testing.T) {
+		render := func(text string) []byte {
+			t.Helper()
+			layout := strings.Replace(fmt.Sprintf(template, "{}", "{}"), "[people.name]", text, 1)
+			pdf, err := qfreportpdf.Generate([]byte(layout), []byte(`{"people":[]}`))
+			if err != nil {
+				t.Fatal(err)
+			}
+			return renderPage(t, pdf, "1").Pix
+		}
+		if !bytes.Equal(render("Total [PAGETOTAL()]"), render("Total 1")) {
+			t.Fatal("the rendered page total should match the literal digit")
+		}
 	})
 }

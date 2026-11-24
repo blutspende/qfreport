@@ -61,7 +61,7 @@ Page count, page dimensions in points, and extracted text on each page must matc
 
 Suppose you want a list of orders with a heading and one line per order. Build the template in three steps:
 
-1. **Set up the page and fonts.** Set the page dimensions, units, orientation, and margins. This example uses A4 in millimeters with 15 mm margins. An empty `fonts` object selects the built-in PDF fonts.
+1. **Set up the page and fonts.** Set the page dimensions, units, orientation, and margins. This example uses A4 in millimeters with 15 mm margins. An empty `fonts` object uses the default Unicode text mode.
 2. **Declare the data model.** In `dataSources`, declare a data source called `orders` with a string column called `id` and an integer column called `quantity`. These declarations tell the library what to accept in `dataJSON`.
 3. **Place the content in bands.** The `title` band prints once. The `detail` band repeats for each row in `orders`. Each element’s `rect` gives its position within the band and its dimensions, in the page’s units. Within text, `[orders.id]` and `[orders.quantity]` insert values from the current row.
 
@@ -172,9 +172,26 @@ The caller chooses where the bytes go. For example, an HTTP handler can return t
 
 Only font names predefined in `$defs.fontName` in the [report schema](internal/render/report.schema.json) are accepted. This applies to `defaults.font`, each element’s `style.font`, and the keys in `fonts`. Examples include `Helvetica`, `Courier New`, and `Inter`.
 
-With `"fonts": {}`, the renderer maps the selected name to a built-in PDF family. To use the actual Inter typeface, set `style.font` to `"Inter"` and put the base64-encoded TrueType file in `fonts.Inter.url` with the prefix `data:font/ttf;base64,`.
+Set `defaults.textMode` to choose how the PDF draws text when the selected font has no embedded font file. Both the template and report data are UTF-8 JSON.
 
-For an image element, set `image.mime` to `image/png`, `image/jpeg`, or `image/svg+xml`, and put the base64-encoded image bytes in `image.data`. Fonts and images are embedded in the template so rendering can run entirely in memory.
+| Mode | Font and character coverage |
+| --- | --- |
+| `unicode` (default) | Embeds the bundled Go TrueType font in the requested regular, bold, italic, or bold italic style. Use `"fonts": {}` to use the bundled font. If it lacks a glyph, `Generate` returns an error with the band, element, and Unicode code point. |
+| `windows-1252` | Maps the selected font name to built-in Helvetica, Times, or Courier. Use this mode to preserve built-in font metrics. Characters outside Windows-1252 return an error. |
+
+To choose built-in fonts, add this to the template.
+
+```json
+"defaults": {
+  "textMode": "windows-1252"
+}
+```
+
+An explicitly embedded TrueType font takes precedence in either mode. To use Inter, set `style.font` to `"Inter"` and put the base64-encoded TrueType file in `fonts.Inter.url` with the prefix `data:font/ttf;base64,`.
+
+Bundled Go fonts have different metrics from the built-in PDF fonts. Changing modes can change wrapping and layout.
+
+For an image element, set `image.mime` to `image/png`, `image/jpeg`, or `image/svg+xml`, and put the base64-encoded image bytes in `image.data`. Embed assets in the template to render entirely in memory.
 
 ## Numeric barcodes
 
