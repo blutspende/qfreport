@@ -61,7 +61,7 @@ Page count, page dimensions in points, and extracted text on each page must matc
 
 Suppose you want a list of orders with a heading and one line per order. Build the template in three steps:
 
-1. **Set up the page and fonts.** Set the page dimensions, units, orientation, and margins. This example uses A4 in millimeters with 15 mm margins. An empty `fonts` object uses the default Unicode text mode.
+1. **Set up the page and fonts.** Set the page dimensions, units, orientation, and margins. This example uses A4 in millimeters with 15 mm margins. With the default text mode and an empty `fonts` object, the library uses its bundled font.
 2. **Declare the data model.** In `dataSources`, declare a data source called `orders` with a string column called `id` and an integer column called `quantity`. These declarations tell the library what to accept in `dataJSON`.
 3. **Place the content in bands.** The `title` band prints once. The `detail` band repeats for each row in `orders`. Each element’s `rect` gives its position within the band and its dimensions, in the page’s units. Within text, `[orders.id]` and `[orders.quantity]` insert values from the current row.
 
@@ -112,6 +112,116 @@ The library validates `templateJSON` against the [embedded report schema](intern
 To group detail rows, place the detail bands between `groupHeader` and `groupFooter` bands that use the same data source and the same `groupBy` columns or `groupExpr`. Either group band is optional. Groups print in the order their first row appears. Within each group, rows retain their input order, and the first row supplies the bindings for the group header and footer.
 
 Each detail or report band must fit between the page and column headers and footers on a fresh page. If a band is too tall for that space, `Generate` returns an error naming the band.
+
+### Fit text in a box
+
+To give long order IDs two lines at 11 pt, set the `orderRow` band’s `height` to `12` and replace its text element with this one.
+
+```json
+{
+  "id": "order", "name": "Order ID and quantity", "type": "text",
+  "rect": { "x": 0, "y": 0, "w": 55, "h": 10 },
+  "style": { "font": "Helvetica", "size": 11 },
+  "wordWrap": true,
+  "autoSize": false,
+  "text": "[orders.id] (quantity: [orders.quantity])"
+}
+```
+
+A short ID fits on one line. A longer ID, such as `de36a28c-8676-4f5a-87fc-82df1935e971`, makes the text wrap inside the 55 mm box. With `autoSize: false`, the font stays at 11 pt. Set the box and band heights to leave enough room for the expected lines.
+
+Set `autoSize` to `true` to let the renderer shrink the font until the text fits the box’s width and height. With `wordWrap: false`, this can keep an order ID on one line. The box dimensions stay fixed in either case. If the text still cannot fit at 4 pt, or at its configured size when that size is already smaller, `Generate` returns an error identifying the element.
+
+### Add page numbers
+
+Append this band to the template’s `bands` array to print a page number at the bottom right of every page.
+
+```json
+{
+  "id": "pageNumbers", "kind": "pageFooter", "height": 8,
+  "elements": [{
+    "id": "pageNumber", "name": "Page number", "type": "text",
+    "rect": { "x": 0, "y": 0, "w": 180, "h": 6 },
+    "style": { "font": "Helvetica", "size": 10 },
+    "horizontalAlign": "end",
+    "text": "Page [PAGE()] of [PAGETOTAL()]"
+  }]
+}
+```
+
+The first page of a three-page report prints **Page 1 of 3**. The renderer resolves the numbers before fitting and wrapping the text.
+
+### Choose fonts and character coverage
+
+Template and data JSON use UTF-8. By default, `defaults.textMode` is `unicode`. With `"fonts": {}`, the renderer embeds the bundled Go TrueType font in the requested regular, bold, italic, or bold italic style. If the font lacks a glyph, `Generate` reports the band, element, and Unicode code point.
+
+To use built-in PDF font metrics, add these defaults at the top level of the template.
+
+```json
+{
+  "defaults": {
+    "font": "Helvetica",
+    "textMode": "windows-1252"
+  }
+}
+```
+
+This mode maps unembedded font names to built-in Helvetica, Times, or Courier. For example, `Café` renders with built-in Helvetica, while `東京` returns an error because those characters are outside Windows-1252. Changing text modes can change wrapping because the fonts have different metrics.
+
+To embed Inter instead, replace the template’s `fonts` object with the one below, substitute the base64 of your TrueType file for `BASE64_TTF`, and set the desired text element’s `style.font` to `"Inter"`.
+
+```json
+{
+  "fonts": {
+    "Inter": { "url": "data:font/ttf;base64,BASE64_TTF" }
+  }
+}
+```
+
+An embedded font takes precedence in either text mode. See `$defs.fontName` in the [report schema](internal/render/report.schema.json) for the names accepted by `defaults.font`, `style.font`, and `fonts`.
+
+### Embed an image
+
+Add this element to the `heading` band’s `elements` array to place a blue circle in a 10 × 10 mm box near the right margin.
+
+```json
+{
+  "id": "mark", "name": "Blue circle", "type": "image",
+  "rect": { "x": 165, "y": 0, "w": 10, "h": 10 },
+  "style": {},
+  "image": {
+    "mime": "image/svg+xml",
+    "data": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMCAxMCI+PGNpcmNsZSBjeD0iNSIgY3k9IjUiIHI9IjQiIGZpbGw9IiMyNTYzZWIiLz48L3N2Zz4="
+  }
+}
+```
+
+For your own image, put the base64-encoded file bytes in `image.data` and set `image.mime` to `image/png`, `image/jpeg`, or `image/svg+xml`. The renderer reads the asset from the template in memory.
+
+### Add a numeric barcode
+
+Add this element to the `heading` band’s `elements` array to print an EAN-13 barcode beside the heading.
+
+```json
+{
+  "id": "productCode", "name": "Product barcode", "type": "barcode",
+  "rect": { "x": 100, "y": 0, "w": 55, "h": 12 },
+  "style": {},
+  "barcodeType": "EAN13",
+  "text": "012345678901"
+}
+```
+
+This encodes `0123456789012`. The renderer calculates the final `2` from the 12 digits supplied. Supplying all 13 digits requires a valid check digit. Use strings for barcode values to preserve leading zeros.
+
+| `barcodeType` | Digits without check digit | Digits with check digit |
+| --- | ---: | ---: |
+| `EAN13` | 12 | 13 |
+| `EAN8` | 7 | 8 |
+| `UPC` (UPC-A) | 11 | 12 |
+| `ITF-14` | 13 | 14 |
+
+`EAN2` and `EAN5` require exactly 2 and 5 digits, respectively. SVG images and barcodes are converted to pixels using the physical size of their boxes. Equivalent boxes in `mm`, `inch`, and `px` have the same raster density, with `px` based on 96 pixels per inch.
 
 ## 2. Supply runtime data in `dataJSON`
 
@@ -167,32 +277,3 @@ func main() {
 ```
 
 The caller chooses where the bytes go. For example, an HTTP handler can return them as `application/pdf`. On validation or rendering failure, `Generate` returns a nil slice and an error.
-
-## Fonts and images
-
-Only font names predefined in `$defs.fontName` in the [report schema](internal/render/report.schema.json) are accepted. This applies to `defaults.font`, each element’s `style.font`, and the keys in `fonts`. Examples include `Helvetica`, `Courier New`, and `Inter`.
-
-Set `defaults.textMode` to choose how the PDF draws text when the selected font has no embedded font file. Both the template and report data are UTF-8 JSON.
-
-| Mode | Font and character coverage |
-| --- | --- |
-| `unicode` (default) | Embeds the bundled Go TrueType font in the requested regular, bold, italic, or bold italic style. Use `"fonts": {}` to use the bundled font. If it lacks a glyph, `Generate` returns an error with the band, element, and Unicode code point. |
-| `windows-1252` | Maps the selected font name to built-in Helvetica, Times, or Courier. Use this mode to preserve built-in font metrics. Characters outside Windows-1252 return an error. |
-
-To choose built-in fonts, add this to the template.
-
-```json
-"defaults": {
-  "textMode": "windows-1252"
-}
-```
-
-An explicitly embedded TrueType font takes precedence in either mode. To use Inter, set `style.font` to `"Inter"` and put the base64-encoded TrueType file in `fonts.Inter.url` with the prefix `data:font/ttf;base64,`.
-
-Bundled Go fonts have different metrics from the built-in PDF fonts. Changing modes can change wrapping and layout.
-
-For an image element, set `image.mime` to `image/png`, `image/jpeg`, or `image/svg+xml`, and put the base64-encoded image bytes in `image.data`. Embed assets in the template to render entirely in memory.
-
-## Numeric barcodes
-
-Pass barcode values as strings to preserve leading zeros. `EAN13` accepts 12 or 13 digits, `EAN8` accepts 7 or 8, `UPC` (UPC-A) accepts 11 or 12, and `ITF-14` accepts 13 or 14. The shorter form calculates the check digit. The longer form must include a valid one. `EAN2` and `EAN5` require exactly 2 and 5 digits, respectively.

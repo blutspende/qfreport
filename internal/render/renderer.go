@@ -35,7 +35,8 @@ const bindingPath = `(\$root|[A-Za-z_][A-Za-z0-9_-]*)\.([A-Za-z_][A-Za-z0-9_-]*(
 
 var bindingPattern = regexp.MustCompile(`\[` + bindingPath + `\]`)
 var bareBindingPattern = regexp.MustCompile(`^` + bindingPath + `$`)
-var pageAliasPattern = regexp.MustCompile(`\{(nb|[0-9]+)\}`)
+
+const pageTotalToken = "[PAGETOTAL()]"
 
 // Allow for floating-point rounding when a band fits exactly.
 const pageFitTolerance = 1e-9
@@ -57,7 +58,9 @@ type renderer struct {
 	customFonts   map[FontName]bool
 	bundledFonts  map[string]*sfnt.Font
 	data          map[string][]map[string]string // All rows per source in input order, with display text keyed by column.
-	pageAlias     string
+	countingPages bool
+	pageNumber    int
+	pageTotal     string
 	resourceID    int
 }
 
@@ -74,6 +77,15 @@ func PDF(report Report, data map[string][]map[string]string) (document []byte, e
 	r, err := newRenderer(report, data)
 	if err != nil {
 		return nil, err
+	}
+	// Fixed band heights let us count pages without laying out any text.
+	if usesPageTotal(report) {
+		r.countingPages = true
+		if err := r.render(); err != nil {
+			return nil, err
+		}
+		r.pageTotal = strconv.Itoa(r.pageNumber)
+		r.countingPages = false
 	}
 	if err := r.render(); err != nil {
 		return nil, err
@@ -111,8 +123,6 @@ func newRenderer(report Report, data map[string][]map[string]string) (*renderer,
 	})
 	pdf.SetAutoPageBreak(false, 0)
 	pdf.SetMargins(0, 0, 0)
-	pageAlias := selectPageAlias(report, data)
-	pdf.AliasNbPages(pageAlias)
 	pdf.SetCreator("qfreportpdf", true)
 	if title, ok := report.Meta["title"].(string); ok {
 		pdf.SetTitle(title, true)
@@ -125,7 +135,6 @@ func newRenderer(report Report, data map[string][]map[string]string) (*renderer,
 		textMode:    TextModeUnicode,
 		customFonts: make(map[FontName]bool),
 		data:        data,
-		pageAlias:   pageAlias,
 	}
 	if defaults := report.Defaults; defaults != nil && defaults.TextMode != "" {
 		r.textMode = defaults.TextMode
@@ -149,38 +158,19 @@ func newRenderer(report Report, data map[string][]map[string]string) (*renderer,
 	return r, nil
 }
 
-// fpdf substitutes its alias throughout the final page streams. Pick a short
-// token absent from the text so a literal "{nb}" survives serialization.
-func selectPageAlias(report Report, data map[string][]map[string]string) string {
-	used := make(map[string]bool)
-	record := func(value string) {
-		if strings.Contains(value, "{") {
-			for _, alias := range pageAliasPattern.FindAllString(value, -1) {
-				used[alias] = true
-			}
-		}
-	}
+func usesPageTotal(report Report) bool {
 	for _, band := range report.Bands {
 		for _, element := range band.Elements {
-			record(element.Text)
-			record(element.Expression)
-		}
-	}
-	for _, rows := range data {
-		for _, row := range rows {
-			for _, value := range row {
-				record(value)
+			if element.Binding == pageTotalToken || strings.Contains(element.Text, pageTotalToken) || strings.Contains(element.Expression, pageTotalToken) {
+				return true
 			}
 		}
 	}
-	alias := "{nb}"
-	for i := 0; used[alias]; i++ {
-		alias = fmt.Sprintf("{%02d}", i)
-	}
-	return alias
+	return false
 }
 
 func (r *renderer) render() error {
+	r.pageNumber = 0
 	ctx := r.baseContext()
 	if err := r.addPage(ctx); err != nil {
 		return err
@@ -242,8 +232,12 @@ func (r *renderer) renderDataBands(bands []Band, source string, rows []map[strin
 }
 
 func (r *renderer) addPage(ctx renderContext) error {
-	r.pdf.AddPage()
+	r.pageNumber++
 	r.contentY = r.contentTop
+	if r.countingPages {
+		return nil
+	}
+	r.pdf.AddPage()
 
 	headerY := r.u(r.report.Page.Margin.Top)
 	for _, band := range r.report.Bands {
@@ -278,8 +272,10 @@ func (r *renderer) renderFlowBand(band Band, ctx renderContext) error {
 			return err
 		}
 	}
-	if err := r.renderBandAt(band, r.contentY, ctx); err != nil {
-		return err
+	if !r.countingPages {
+		if err := r.renderBandAt(band, r.contentY, ctx); err != nil {
+			return err
+		}
 	}
 	r.contentY += height
 	return nil
@@ -329,13 +325,18 @@ func (r *renderer) renderElement(element Element, bandX, bandY float64, ctx rend
 }
 
 func (r *renderer) elementText(element Element, ctx renderContext) string {
-	if element.Expression != "" {
-		return r.expand(element.Expression, ctx)
+	value := element.Expression
+	if value == "" {
+		value = element.Text
+		if element.Binding != "" {
+			if source, column, ok := parseBinding(element.Binding); ok {
+				return ctx[source][column]
+			}
+			value = element.Binding
+		}
 	}
-	if element.Binding != "" {
-		return r.resolveBinding(element.Binding, ctx)
-	}
-	return r.expand(element.Text, ctx)
+	// Resolve the total in output only so grouping stays identical in both passes.
+	return r.expand(strings.ReplaceAll(value, pageTotalToken, r.pageTotal), ctx)
 }
 
 func (r *renderer) renderText(element Element, x, y, w, h float64, ctx renderContext) error {
@@ -368,11 +369,26 @@ func (r *renderer) renderText(element Element, x, y, w, h float64, ctx renderCon
 	}
 
 	wordWrap := element.WordWrap != nil && *element.WordWrap
-	if element.AutoSize != nil && *element.AutoSize {
-		for size > 4 && !r.textFits(text, w, h, wordWrap, unicodeFont) {
-			size -= 0.5
-			r.pdf.SetFont(font, style, size)
+	if element.AutoSize != nil && *element.AutoSize && text != "" && !r.textFits(text, w, h, wordWrap, unicodeFont) {
+		low, high := math.Min(4, size), size
+		r.pdf.SetFontSize(low)
+		if !r.textFits(text, w, h, wordWrap, unicodeFont) {
+			return fmt.Errorf("text does not fit its box at %g pt", low)
 		}
+		for high-low > 0.5 {
+			mid := low + (high-low)/2
+			if mid == low || mid == high {
+				break
+			}
+			r.pdf.SetFontSize(mid)
+			if r.textFits(text, w, h, wordWrap, unicodeFont) {
+				low = mid
+			} else {
+				high = mid
+			}
+		}
+		size = low
+		r.pdf.SetFontSize(size)
 	}
 	lineHeight := r.pdf.PointConvert(size) * 1.2
 	lines := r.textLines(text, w, wordWrap, unicodeFont)
@@ -442,7 +458,8 @@ func (r *renderer) renderImage(element Element, x, y, w, h float64) error {
 		return err
 	}
 	if mime == ImageSVG {
-		raster, err := rasterizeSVG(data, w, h, element.ProportionalScaling == nil || *element.ProportionalScaling)
+		pixelWidth, pixelHeight := r.rasterSize(w, h, 4)
+		raster, err := rasterizeSVG(data, pixelWidth, pixelHeight, element.ProportionalScaling == nil || *element.ProportionalScaling)
 		if err != nil {
 			return err
 		}
@@ -456,13 +473,17 @@ func (r *renderer) renderImage(element Element, x, y, w, h float64) error {
 	return r.renderRaster(data, imageType, x, y, w, h, element.ProportionalScaling == nil || *element.ProportionalScaling)
 }
 
-func rasterizeSVG(data []byte, width, height float64, proportional bool) ([]byte, error) {
+func (r *renderer) rasterSize(w, h, pixelsPerMillimeter float64) (int, int) {
+	const pointsPerMillimeter = 72.0 / 25.4
+	pixelsPerUnit := pixelsPerMillimeter * (r.pdf.GetConversionRatio() / pointsPerMillimeter)
+	return max(1, int(math.Round(w*pixelsPerUnit))), max(1, int(math.Round(h*pixelsPerUnit)))
+}
+
+func rasterizeSVG(data []byte, pixelWidth, pixelHeight int, proportional bool) ([]byte, error) {
 	icon, err := oksvg.ReadIconStream(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("parse SVG: %w", err)
 	}
-	pixelWidth := max(1, int(math.Ceil(width*4)))
-	pixelHeight := max(1, int(math.Ceil(height*4)))
 	targetX, targetY := 0.0, 0.0
 	targetW, targetH := float64(pixelWidth), float64(pixelHeight)
 	if proportional && icon.ViewBox.W > 0 && icon.ViewBox.H > 0 {
@@ -508,8 +529,7 @@ func (r *renderer) renderBarcode(element Element, x, y, w, h float64, ctx render
 	if err != nil {
 		return err
 	}
-	width := max(1, int(w*8))
-	height := max(1, int(h*8))
+	width, height := r.rasterSize(w, h, 8)
 	scaled, err := barcode.Scale(code, width, height)
 	if err != nil {
 		return fmt.Errorf("scale barcode: %w", err)
@@ -539,7 +559,7 @@ func (r *renderer) useBundledFont(style, text string) error {
 		if err != nil {
 			return fmt.Errorf("parse bundled Go font: %w", err)
 		}
-		r.addUnicodeFont(bundledFontFamily, face, data)
+		r.pdf.AddUTF8FontFromBytes(bundledFontFamily, face, data)
 		if err := r.pdf.Error(); err != nil {
 			return fmt.Errorf("register bundled Go font: %w", err)
 		}
@@ -566,15 +586,6 @@ func (r *renderer) useBundledFont(style, text string) error {
 	return nil
 }
 
-func (r *renderer) addUnicodeFont(family, style string, data []byte) {
-	r.pdf.AddUTF8FontFromBytes(family, style, data)
-	// shortcut: retain page-count digits via a discarded template, remove when fpdf tracks alias replacement glyphs.
-	r.pdf.CreateTemplate(func(tpl *fpdf.Tpl) {
-		tpl.SetFont(family, style, 10)
-		tpl.Text(0, 0, "0123456789")
-	})
-}
-
 func (r *renderer) loadFonts() error {
 	for name, definition := range r.report.Fonts {
 		mime, data, err := decodeDataURI(definition.URL)
@@ -596,7 +607,7 @@ func (r *renderer) loadFonts() error {
 		// picking the built-in font of the same name.
 		family := "embedded-" + name
 		for _, style := range []string{"", "B", "I", "BI"} {
-			r.addUnicodeFont(family, style, data)
+			r.pdf.AddUTF8FontFromBytes(family, style, data)
 			r.pdf.SetFont(family, style, 10)
 			if err := r.pdf.Error(); err != nil {
 				return fmt.Errorf("register TrueType font %q: %w", name, err)
@@ -772,16 +783,8 @@ func parseBinding(value string) (source, column string, ok bool) {
 	return match[1], match[2], true
 }
 
-func (r *renderer) resolveBinding(binding string, ctx renderContext) string {
-	if source, column, ok := parseBinding(binding); ok {
-		return ctx[source][column]
-	}
-	return r.expand(binding, ctx)
-}
-
 func (r *renderer) expand(value string, ctx renderContext) string {
-	value = strings.ReplaceAll(value, "[PAGE()]", strconv.Itoa(r.pdf.PageNo()))
-	value = strings.ReplaceAll(value, "[PAGETOTAL()]", r.pageAlias)
+	value = strings.ReplaceAll(value, "[PAGE()]", strconv.Itoa(r.pageNumber))
 	return bindingPattern.ReplaceAllStringFunc(value, func(token string) string {
 		match := bindingPattern.FindStringSubmatch(token)
 		return ctx[match[1]][match[2]]
@@ -790,8 +793,17 @@ func (r *renderer) expand(value string, ctx renderContext) string {
 
 func (r *renderer) textFits(text string, width, height float64, wrap, custom bool) bool {
 	lines := r.textLines(text, width, wrap, custom)
-	size, _ := r.pdf.GetFontSize()
-	return float64(len(lines))*r.pdf.PointConvert(size)*1.2 <= height
+	_, size := r.pdf.GetFontSize()
+	if float64(len(lines))*size*1.2 > height {
+		return false
+	}
+	availableWidth := math.Max(0, width-2*r.pdf.GetCellMargin())
+	for _, line := range lines {
+		if r.pdf.GetStringWidth(line) > availableWidth+pageFitTolerance {
+			return false
+		}
+	}
+	return true
 }
 
 func (r *renderer) textLines(text string, width float64, wrap, custom bool) []string {

@@ -3,6 +3,7 @@ package qfreportpdf_test
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/xml"
 	"fmt"
 	"slices"
 	"strings"
@@ -220,6 +221,112 @@ func TestGenerateUnicodeText(t *testing.T) {
 		}
 		if !bytes.Equal(render("Total [PAGETOTAL()]"), render("Total 1")) {
 			t.Fatal("the rendered page total should match the literal digit")
+		}
+	})
+}
+
+func TestGenerateRasterSizeAcrossPageUnits(t *testing.T) {
+	const template = `{
+		"page":{"size":"custom","orientation":"landscape","unit":%q,"width":%.6f,"height":%.6f,
+			"margin":{"top":0,"right":0,"bottom":0,"left":0}},
+		"fonts":{},
+		"dataSources":{"rows":{"kind":"table","columns":[{"name":"value","type":"string"}]}},
+		"bands":[{"id":"assets","kind":"title","height":%.6f,"elements":[
+			{"id":"svg","name":"SVG","type":"image","rect":{"x":0,"y":0,"w":%.6f,"h":%.6f},
+				"style":{},"image":{"mime":"image/svg+xml","data":%q}},
+			{"id":"ean","name":"EAN","type":"barcode","rect":{"x":%.6f,"y":0,"w":%.6f,"h":%.6f},
+				"style":{},"barcodeType":"EAN13","text":"4006381333931"}
+		]}]
+	}`
+	const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 12"><rect width="40" height="12" fill="#334455"/></svg>`
+	imageData := base64.StdEncoding.EncodeToString([]byte(svg))
+	for _, tc := range []struct {
+		unit  string
+		scale float64
+	}{
+		{"mm", 1},
+		{"inch", 1.0 / 25.4},
+		{"px", 96.0 / 25.4},
+	} {
+		t.Run(tc.unit, func(t *testing.T) {
+			s := tc.scale
+			layout := fmt.Sprintf(template, tc.unit, 152.4*s, 101.6*s, 30*s, 40*s, 12*s, imageData, 45*s, 40*s, 12*s)
+			pdf, err := qfreportpdf.Generate([]byte(layout), []byte(`{"rows":[]}`))
+			if err != nil {
+				t.Fatal(err)
+			}
+			list := poppler(t, pdf, "pdfimages", "-list", "-")
+			var sizes [][2]string
+			for line := range strings.SplitSeq(string(list), "\n") {
+				fields := strings.Fields(line)
+				if len(fields) >= 5 && fields[2] == "image" {
+					sizes = append(sizes, [2]string{fields[3], fields[4]})
+				}
+			}
+			want := [][2]string{{"160", "48"}, {"320", "96"}}
+			if !slices.Equal(sizes, want) {
+				t.Fatalf("raster dimensions = %v, want %v", sizes, want)
+			}
+		})
+	}
+}
+
+func TestGenerateTextFitting(t *testing.T) {
+	template := []byte(`{
+		"page":{"size":"custom","orientation":"landscape","unit":"mm","width":100,"height":70,
+			"margin":{"top":10,"right":10,"bottom":10,"left":10}},
+		"fonts":{},
+		"dataSources":{"rows":{"kind":"table","columns":[{"name":"label","type":"string"}]}},
+		"bands":[
+			{"id":"detail","kind":"detail","height":30,"dataSource":"rows","elements":[
+				{"id":"label","name":"Label","type":"text","rect":{"x":0,"y":0,"w":22,"h":8},
+					"autoSize":true,"wordWrap":false,"style":{"size":14},"text":"[rows.label]"}]},
+			{"id":"footer","kind":"pageFooter","height":20,"elements":[
+				{"id":"total","name":"Total pages","type":"text","rect":{"x":0,"y":0,"w":4,"h":19},
+					"wordWrap":true,"style":{"size":10},"binding":"[PAGETOTAL()]"}]}
+		]
+	}`)
+	data := []byte(`{"rows":[{"label":"A long order reference"},{"label":"Another long reference"}]}`)
+	pdf, err := qfreportpdf.Generate(template, data)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("autoSize fits box width", func(t *testing.T) {
+		var doc struct {
+			Words []struct {
+				Text string  `xml:",chardata"`
+				XMax float64 `xml:"xMax,attr"`
+			} `xml:"body>doc>page>word"`
+		}
+		if err := xml.Unmarshal(poppler(t, pdf, "pdftotext", "-bbox", "-", "-"), &doc); err != nil {
+			t.Fatal(err)
+		}
+		const rightEdge = (10.0 + 22.0) * 72 / 25.4
+		for _, word := range doc.Words {
+			if word.XMax > rightEdge {
+				t.Errorf("word %q ends at %.2f pt, past the box edge at %.2f pt", word.Text, word.XMax, rightEdge)
+			}
+		}
+	})
+
+	t.Run("wrapped final page total", func(t *testing.T) {
+		text := poppler(t, pdf, "pdftotext", "-layout", "-", "-")
+		pages := strings.Split(strings.TrimSuffix(string(text), "\f"), "\f")
+		for i, page := range pages {
+			pages[i] = strings.Join(strings.Fields(page), " ")
+		}
+		want := []string{"A long order reference 2", "Another long reference 2"}
+		if !slices.Equal(pages, want) {
+			t.Fatalf("pages = %q, want %q", pages, want)
+		}
+	})
+
+	t.Run("text cannot fit at minimum size", func(t *testing.T) {
+		narrow := bytes.Replace(template, []byte(`"w":22`), []byte(`"w":2`), 1)
+		pdf, err := qfreportpdf.Generate(narrow, data)
+		if pdf != nil || err == nil || !strings.Contains(err.Error(), `render band "detail" element "label": text does not fit its box at 4 pt`) {
+			t.Fatalf("Generate returned %d bytes and %v, want a contextual text fitting error", len(pdf), err)
 		}
 	})
 }
