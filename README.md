@@ -109,6 +109,8 @@ Save this complete example as `template.json`:
 
 The library validates `templateJSON` against the [embedded report schema](internal/render/report.schema.json), decodes it into its internal Go report model, and checks that bindings refer to declared sources and columns.
 
+Source and column names start with an ASCII letter or underscore. The remaining characters may also include digits and hyphens. `$root` is also a valid source name. Column names may contain dot-separated segments that each follow the same rule. For example, `[orders.order.id]` reads the literal key `"order.id"` in an `orders` row. To bind a column such as `order id`, rename it to `order_id` in both JSON documents and use `[orders.order_id]` in the template.
+
 To group detail rows, place the detail bands between `groupHeader` and `groupFooter` bands that use the same data source and the same `groupBy` columns or `groupExpr`. Either group band is optional. Groups print in the order their first row appears. Within each group, rows retain their input order, and the first row supplies the bindings for the group header and footer.
 
 Each detail or report band must fit between the page and column headers and footers on a fresh page. If a band is too tall for that space, `Generate` returns an error naming the band.

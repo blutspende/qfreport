@@ -13,6 +13,41 @@ import (
 	"golang.org/x/image/font/gofont/goregular"
 )
 
+func TestGenerateRejectsUnsupportedDataSourceDeclarations(t *testing.T) {
+	const template = `{
+		"page":{"size":"A4","orientation":"portrait","unit":"mm","width":210,"height":297,
+			"margin":{"top":15,"right":15,"bottom":15,"left":15}},
+		"fonts":{},
+		"dataSources":{%q:{"kind":"table","columns":[{"name":%q,"type":"string"}]%s}},
+		"bands":[{"id":"title","kind":"title","height":10,"elements":[]}]
+	}`
+	cases := []struct {
+		name   string
+		source string
+		column string
+		extra  string
+		want   string
+	}{
+		{name: "source name with a space", source: "order list", column: "id", want: "invalid propertyName 'order list'"},
+		{name: "column name with a space", source: "orders", column: "order id", want: "/dataSources/orders/columns/0/name"},
+		{name: "memory source", source: "orders", column: "id", extra: `,"source":"memory"`, want: "additional properties 'source' not allowed"},
+		{name: "CSV source", source: "orders", column: "id", extra: `,"source":"csv"`, want: "additional properties 'source' not allowed"},
+		{name: "CSV filename", source: "orders", column: "id", extra: `,"csvFileName":"orders.csv"`, want: "csvFileName"},
+		{name: "embed flag", source: "orders", column: "id", extra: `,"embed":true`, want: "additional properties 'embed' not allowed"},
+		{name: "sample rows", source: "orders", column: "id", extra: `,"samples":[{"id":"ORD-001"}]`, want: "additional properties 'samples' not allowed"},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			layout := []byte(fmt.Sprintf(template, tt.source, tt.column, tt.extra))
+			data := []byte(fmt.Sprintf(`{%q:[]}`, tt.source))
+			pdf, err := qfreportpdf.Generate(layout, data)
+			if pdf != nil || err == nil || !strings.HasPrefix(err.Error(), "template:") || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("Generate returned %d bytes and error %v, want nil PDF and a template error about %q", len(pdf), err, tt.want)
+			}
+		})
+	}
+}
+
 func TestGenerateGroupBandOrder(t *testing.T) {
 	template := []byte(`{
 		"page": {"size":"A4","orientation":"portrait","unit":"mm","width":210,"height":297,
