@@ -1,0 +1,72 @@
+{
+  "meta": {"title": "Pet store dispatch label"},
+  "page": {
+    "size": "A6", "orientation": "landscape", "unit": "mm", "width": 148, "height": 105,
+    "margin": {"top": 8, "right": 8, "bottom": 8, "left": 8}
+  },
+  "fonts": {},
+  "dataSources": {
+    "cartons": {
+      "kind": "table",
+      "columns": [
+        {"name": "id", "type": "uuidv4"},
+        {"name": "destination", "type": "string"},
+        {"name": "packedBy", "type": "string"},
+        {"name": "date", "type": "date"},
+        {"name": "item", "type": "string"},
+        {"name": "units", "type": "integer"}
+      ]
+    }
+  },
+  "bands": [
+    {
+      "id": "label", "kind": "detail", "height": 77, "dataSource": "cartons",
+      "elements": [
+        {
+          "id": "shop", "name": "Pet store", "type": "text", "rect": {"x": 0, "y": 0, "w": 72, "h": 6},
+          "style": {"size": 9, "bold": true, "fgColor": "#24685F"}, "text": "WILLOW CREEK PET SUPPLY"
+        },
+        {
+          "id": "title", "name": "Label title", "type": "text", "rect": {"x": 0, "y": 8, "w": 72, "h": 10},
+          "style": {"size": 21, "bold": true, "fgColor": "#173B3D"}, "text": "Carton dispatch"
+        },
+        {
+          "id": "destination", "name": "Destination", "type": "text", "rect": {"x": 0, "y": 25, "w": 74, "h": 7},
+          "style": {"size": 11}, "text": "Ship to: [cartons.destination]"
+        },
+        {
+          "id": "packer", "name": "Packed by", "type": "text", "rect": {"x": 0, "y": 34, "w": 74, "h": 7},
+          "style": {"size": 11}, "text": "Packed by: [cartons.packedBy]"
+        },
+        {
+          "id": "id-label", "name": "UUID label", "type": "text", "rect": {"x": 80, "y": 0, "w": 52, "h": 6},
+          "style": {"size": 9, "bold": true, "fgColor": "#24685F"}, "text": "CARTON UUID"
+        },
+        {
+          "id": "id", "name": "Carton UUID", "type": "text", "rect": {"x": 80, "y": 8, "w": 52, "h": 13},
+          "style": {"size": 10}, "wordWrap": true, "binding": "cartons.id"
+        },
+        {
+          "id": "date", "name": "Dispatch date", "type": "text", "rect": {"x": 80, "y": 25, "w": 52, "h": 7},
+          "style": {"size": 10}, "text": "Date: [cartons.date]"
+        },
+        {
+          "id": "contents-label", "name": "Contents label", "type": "text", "rect": {"x": 0, "y": 48, "w": 132, "h": 7},
+          "style": {"size": 9, "bold": true, "fgColor": "#FFFFFF", "bgColor": "#24685F"},
+          "verticalAlign": "center", "text": "CARTON CONTENTS"
+        },
+        {
+          "id": "contents", "name": "Packed item", "type": "text", "rect": {"x": 0, "y": 59, "w": 132, "h": 8},
+          "style": {"size": 12}, "text": "[cartons.units] × [cartons.item]"
+        }
+      ]
+    },
+    {
+      "id": "footer", "kind": "pageFooter", "height": 7,
+      "elements": [{
+        "id": "page", "name": "Page number", "type": "text", "rect": {"x": 88, "y": 0, "w": 44, "h": 6},
+        "style": {"size": 9, "align": "right"}, "text": "Page [PAGE()] of [PAGETOTAL()]"
+      }]
+    }
+  ]
+}

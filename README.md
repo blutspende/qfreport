@@ -113,6 +113,46 @@ Source and column names start with an ASCII letter or underscore. The remaining 
 
 To group detail rows, place the detail bands between `groupHeader` and `groupFooter` bands that use the same data source and the same `groupBy` columns or `groupExpr`. Either group band is optional. Groups print in the order their first row appears. Within each group, rows retain their input order, and the first row supplies the bindings for the group header and footer.
 
+### Add a child band
+
+In the template’s `bands` array, place a band with `"kind": "child"` immediately after its parent. Whenever the parent prints, the child prints next and can read fields from the same data row.
+
+To try a `detail` band with one child, replace the `bands` array in the sample template with the following JSON.
+
+```json
+[
+  {
+    "id": "orderRow", "kind": "detail", "dataSource": "orders", "height": 8,
+    "elements": [{
+      "id": "order", "name": "Order ID", "type": "text",
+      "rect": { "x": 0, "y": 0, "w": 150, "h": 7 },
+      "style": { "bold": true }, "text": "Order [orders.id]"
+    }]
+  },
+  {
+    "id": "orderQuantity", "kind": "child", "height": 7,
+    "elements": [{
+      "id": "quantity", "name": "Quantity", "type": "text",
+      "rect": { "x": 4, "y": 0, "w": 146, "h": 6 },
+      "style": {}, "text": "Quantity: [orders.quantity]"
+    }]
+  }
+]
+```
+
+`orderRow` selects a row from `orders`. Its child `orderQuantity` inherits that row and prints before `orderRow` moves to the next order. With the two orders in the `data.json` example, each quantity appears under its own ID.
+
+```text
+Order ORD-001
+  Quantity: 2
+Order ORD-002
+  Quantity: 5
+```
+
+To get the same output with two consecutive `detail` bands, set `"kind": "detail"` and `"dataSource": "orders"` on the `orderQuantity` band. Both bands then print in template order for each row.
+
+Several `child` bands can follow one parent. A child of a group header or footer prints once per group. A child of a page or column header or footer repeats on every page, and its height counts toward the space reserved for that header or footer. A child can omit `dataSource`, as above, or name its parent's source explicitly. `Generate` rejects a child with a different source or a child placed first in `bands`.
+
 Each detail or report band must fit between the page and column headers and footers on a fresh page. If a band is too tall for that space, `Generate` returns an error naming the band.
 
 ### Fit text in a box
@@ -180,7 +220,7 @@ To embed Inter instead, replace the template’s `fonts` object with the one bel
 }
 ```
 
-An embedded font takes precedence in either text mode. See `$defs.fontName` in the [report schema](internal/render/report.schema.json) for the names accepted by `defaults.font`, `style.font`, and `fonts`.
+An embedded font takes precedence in either text mode. If it lacks a glyph used in the text, `Generate` reports the band, element, font name, and Unicode code point. For the names accepted by `defaults.font`, `style.font`, and `fonts`, see `$defs.fontName` in the [report schema](internal/render/report.schema.json).
 
 ### Embed an image
 
@@ -223,7 +263,9 @@ This encodes `0123456789012`. The renderer calculates the final `2` from the 12 
 | `UPC` (UPC-A) | 11 | 12 |
 | `ITF-14` | 13 | 14 |
 
-`EAN2` and `EAN5` require exactly 2 and 5 digits, respectively. SVG images and barcodes are converted to pixels using the physical size of their boxes. Equivalent boxes in `mm`, `inch`, and `px` have the same raster density, with `px` based on 96 pixels per inch.
+`EAN2` and `EAN5` require exactly 2 and 5 digits, respectively. The MSI formats accept a nonempty string of ASCII digits, including leading zeros.
+
+SVG images and barcodes are converted to pixels using the physical size of their boxes. Equivalent boxes in `mm`, `inch`, and `px` have the same raster density, with `px` based on 96 pixels per inch.
 
 ## 2. Supply runtime data in `dataJSON`
 

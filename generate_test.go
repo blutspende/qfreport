@@ -5,6 +5,8 @@ import (
 	"encoding/base64"
 	"encoding/xml"
 	"fmt"
+	"image/png"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -86,6 +88,142 @@ func TestGenerateGroupBandOrder(t *testing.T) {
 	}
 }
 
+func TestGenerateGroupedResultComments(t *testing.T) {
+	const template = `{
+		"page":{"size":"custom","orientation":"landscape","unit":"mm","width":110,"height":65,
+			"margin":{"top":5,"right":5,"bottom":5,"left":5}},
+		"fonts":{},
+		"dataSources":{"results":{"kind":"table","columns":[{"name":"sample","type":"string"},
+			{"name":"code","type":"string"},{"name":"comment","type":"string"}]}},
+		"bands":[
+			{"id":"sample","kind":"groupHeader","height":10,"dataSource":"results","groupBy":["sample"],"elements":[
+				{"id":"heading","name":"Sample","type":"text","rect":{"x":0,"y":0,"w":95,"h":8},"style":{},"text":"Sample [results.sample]"}]},
+			{"id":"result","kind":"detail","height":10,"dataSource":"results","elements":[
+				{"id":"code","name":"Result","type":"text","rect":{"x":0,"y":0,"w":95,"h":8},"style":{},"binding":"results.code"}]},
+			{"id":"comment","kind":%q,"height":10,"dataSource":"results","elements":[
+				{"id":"note","name":"Comment","type":"text","rect":{"x":0,"y":0,"w":95,"h":8},"style":{},"binding":"results.comment"}]}
+		]
+	}`
+	data := []byte(`{"results":[
+		{"sample":"EDTA","code":"HGB","comment":"Repeat confirmed"},
+		{"sample":"EDTA","code":"PLT","comment":"Platelet clumps"},
+		{"sample":"Serum","code":"K","comment":"Slight hemolysis"}
+	]}`)
+	// The EDTA heading and two result/comment pairs leave only 5 mm for the next 10 mm heading.
+	want := []string{"Sample EDTA HGB Repeat confirmed PLT Platelet clumps", "Sample Serum K Slight hemolysis"}
+	for _, kind := range []string{"child", "detail"} {
+		t.Run(kind, func(t *testing.T) {
+			pdf, err := qfreportpdf.Generate([]byte(fmt.Sprintf(template, kind)), data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			text := poppler(t, pdf, "pdftotext", "-layout", "-", "-")
+			pages := strings.Split(strings.TrimSuffix(string(text), "\f"), "\f")
+			for i, page := range pages {
+				pages[i] = strings.Join(strings.Fields(page), " ")
+			}
+			if !slices.Equal(pages, want) {
+				t.Fatalf("results and comments by page = %q, want %q", pages, want)
+			}
+		})
+	}
+}
+
+func TestGenerateChildBands(t *testing.T) {
+	const template = `{
+		"page":{"size":"custom","orientation":"landscape","unit":"mm","width":110,"height":70,
+			"margin":{"top":5,"right":5,"bottom":5,"left":5}},
+		"fonts":{},
+		"dataSources":{"results":{"kind":"table","columns":[{"name":"sample","type":"string"},
+			{"name":"code","type":"string"},{"name":"comment","type":"string"}]}},
+		"bands":[%s]
+	}`
+	band := func(id, kind, extra, text string) string {
+		return fmt.Sprintf(`{"id":%q,"kind":%q,"height":5%s,"elements":[
+			{"id":"text","name":"Text","type":"text","rect":{"x":0,"y":0,"w":95,"h":5},"style":{},"text":%q}]}`, id, kind, extra, text)
+	}
+	group := `,"dataSource":"results","groupBy":["sample"]`
+	data := []byte(`{"results":[
+		{"sample":"EDTA","code":"HGB","comment":"Repeat confirmed"},
+		{"sample":"EDTA","code":"PLT","comment":"Platelet clumps"},
+		{"sample":"Serum","code":"K","comment":"Slight hemolysis"}
+	]}`)
+
+	t.Run("each parent kind", func(t *testing.T) {
+		bands := strings.Join([]string{
+			band("page", "pageHeader", "", "Lab report"),
+			band("patient", "child", "", "Patient 42"),
+			band("sample", "groupHeader", group, "Sample [results.sample]"),
+			band("columns", "child", "", "Code / comment"),
+			band("result", "detail", `,"dataSource":"results"`, "[results.code]"),
+			band("comment", "child", "", "[results.comment]"),
+			band("end", "groupFooter", group, "End [results.sample]"),
+			band("signed", "child", "", "Validated [results.sample]"),
+			band("footer", "pageFooter", "", "Page [PAGE()]"),
+			band("legend", "child", "", "Confidential"),
+		}, ",")
+		pdf, err := qfreportpdf.Generate([]byte(fmt.Sprintf(template, bands)), data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := poppler(t, pdf, "pdftotext", "-layout", "-", "-")
+		pages := strings.Split(strings.TrimSuffix(string(text), "\f"), "\f")
+		for i, page := range pages {
+			pages[i] = strings.Join(strings.Fields(page), " ")
+		}
+		// Header and footer children leave 40 mm, so each sample's eight 5 mm bands fill one page.
+		want := []string{
+			"Lab report Patient 42 Sample EDTA Code / comment HGB Repeat confirmed PLT Platelet clumps End EDTA Validated EDTA Page 1 Confidential",
+			"Lab report Patient 42 Sample Serum Code / comment K Slight hemolysis End Serum Validated Serum Page 2 Confidential",
+		}
+		if !slices.Equal(pages, want) {
+			t.Fatalf("pages = %q, want %q", pages, want)
+		}
+	})
+
+	for _, tc := range []struct{ name, bands, want string }{
+		{"first band", band("note", "child", "", "Note"), "template.bands[0].kind: a child band must follow another band"},
+		{"other source", band("page", "pageHeader", "", "Lab report") + "," + band("note", "child", `,"dataSource":"results"`, "[results.code]"),
+			`template.bands[1].dataSource: source "results" differs from band "page"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pdf, err := qfreportpdf.Generate([]byte(fmt.Sprintf(template, tc.bands)), data)
+			if pdf != nil || err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Generate returned %d bytes and error %v, want nil PDF and %q", len(pdf), err, tc.want)
+			}
+		})
+	}
+}
+
+func TestGenerateTypedCells(t *testing.T) {
+	template := []byte(`{
+		"page":{"size":"A4","orientation":"portrait","unit":"mm","width":210,"height":297,
+			"margin":{"top":10,"right":10,"bottom":10,"left":10}},
+		"fonts":{},
+		"dataSources":{"rows":{"kind":"table","columns":[{"name":"id","type":"integer"},
+			{"name":"reading","type":"decimal"},{"name":"flag","type":"boolean"}]}},
+		"bands":[{"id":"row","kind":"detail","height":9,"dataSource":"rows","elements":[
+			{"id":"cells","name":"Cells","type":"text","rect":{"x":0,"y":0,"w":180,"h":8},"style":{},
+				"text":"ID=([rows.id]) reading=([rows.reading]) flag=([rows.flag])"}]}]
+	}`)
+	for _, tc := range []struct{ name, data, want string }{
+		{"values and blanks", `{"rows":[{"id":9007199254740993,"reading":1.2300,"flag":false},{"id":0,"reading":null}]}`,
+			"ID=(9007199254740993) reading=(1.2300) flag=(false) ID=(0) reading=() flag=()"},
+		{"empty table", `{"rows":[]}`, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pdf, err := qfreportpdf.Generate(template, []byte(tc.data))
+			if err != nil {
+				t.Fatal(err)
+			}
+			text := poppler(t, pdf, "pdftotext", "-layout", "-", "-")
+			if got := strings.Join(strings.Fields(string(text)), " "); got != tc.want {
+				t.Fatalf("printed cells = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestGeneratePaginationReservesHeaderAndFooterSpace(t *testing.T) {
 	const template = `{
 		"page":{"size":"custom","orientation":"portrait","unit":"mm","width":100,"height":140.7,
@@ -127,7 +265,7 @@ func TestGeneratePaginationReservesHeaderAndFooterSpace(t *testing.T) {
 	})
 }
 
-func TestGenerateBarcodeTypeAndCheckDigit(t *testing.T) {
+func generateBarcode(kind, content string) ([]byte, error) {
 	const template = `{
 		"page":{"size":"A4","orientation":"portrait","unit":"mm","width":210,"height":297,
 			"margin":{"top":15,"right":15,"bottom":15,"left":15}},
@@ -138,10 +276,10 @@ func TestGenerateBarcodeTypeAndCheckDigit(t *testing.T) {
 				"style":{},"barcodeType":%q,"text":%q}
 		]}]
 	}`
-	generate := func(kind, content string) ([]byte, error) {
-		return qfreportpdf.Generate([]byte(fmt.Sprintf(template, kind, content)), []byte(`{"rows":[]}`))
-	}
+	return qfreportpdf.Generate([]byte(fmt.Sprintf(template, kind, content)), []byte(`{"rows":[]}`))
+}
 
+func TestGenerateBarcodeTypeAndCheckDigit(t *testing.T) {
 	for _, tc := range []struct{ kind, content string }{
 		{"EAN13", "1234567"},
 		{"EAN8", "400638133393"},
@@ -150,9 +288,10 @@ func TestGenerateBarcodeTypeAndCheckDigit(t *testing.T) {
 		{"EAN5", "12"},
 		{"ITF-14", "1234"},
 		{"ITF-14", "12345678901239"},
+		{"MSI", "+123"},
 	} {
 		t.Run(tc.kind+"_"+tc.content, func(t *testing.T) {
-			pdf, err := generate(tc.kind, tc.content)
+			pdf, err := generateBarcode(tc.kind, tc.content)
 			if pdf != nil || err == nil || !strings.Contains(err.Error(), "encode "+tc.kind+" barcode:") {
 				t.Fatalf("Generate returned %d bytes and error %v, want nil PDF and a barcode encoding error", len(pdf), err)
 			}
@@ -160,16 +299,93 @@ func TestGenerateBarcodeTypeAndCheckDigit(t *testing.T) {
 	}
 
 	t.Run("ITF-14 calculates the check digit", func(t *testing.T) {
-		want, err := generate("ITF-14", "12345678901231")
+		want, err := generateBarcode("ITF-14", "12345678901231")
 		if err != nil {
 			t.Fatal(err)
 		}
-		got, err := generate("ITF-14", "1234567890123")
+		got, err := generateBarcode("ITF-14", "1234567890123")
 		if err != nil {
 			t.Fatal(err)
 		}
 		comparePDF(t, want, got)
 	})
+
+	t.Run("20-digit MSI", func(t *testing.T) {
+		pdf, err := generateBarcode("MSI", "12345678901234567890")
+		if err != nil || len(pdf) == 0 {
+			t.Fatalf("Generate returned %d bytes and %v for a 20-digit MSI value", len(pdf), err)
+		}
+	})
+}
+
+func TestGenerateBarcodeSymbols(t *testing.T) {
+	t.Run("EAN-8 decoded digits", func(t *testing.T) {
+		pdf, err := generateBarcode("EAN8", "2000032")
+		if err != nil {
+			t.Fatal(err)
+		}
+		widths := barcodeWidths(t, pdf)
+		// GS1 General Specifications §5.2. Each half has four digits of four runs each.
+		if len(widths) != 43 || widths[:3] != "111" || widths[19:24] != "11111" || widths[40:] != "111" {
+			t.Fatalf("invalid EAN-8 length or guard bars in %q", widths)
+		}
+		patterns := []string{"3211", "2221", "2122", "1411", "1132", "1231", "1114", "1312", "1213", "3112"}
+		var digits strings.Builder
+		data := widths[3:19] + widths[24:40]
+		for i := 0; i < len(data); i += 4 {
+			pattern := data[i : i+4]
+			digit := slices.Index(patterns, pattern)
+			if digit < 0 {
+				t.Fatalf("unknown EAN-8 digit pattern %q", pattern)
+			}
+			digits.WriteByte('0' + byte(digit))
+		}
+		if got := digits.String(); got != "20000325" {
+			t.Fatalf("decoded EAN-8 = %q, want 20000325 including the check digit", got)
+		}
+	})
+
+}
+
+// barcodeWidths reads alternating bars and spaces in modules from the single barcode in a PDF.
+func barcodeWidths(t *testing.T, pdf []byte) string {
+	t.Helper()
+	prefix := filepath.Join(t.TempDir(), "barcode")
+	poppler(t, pdf, "pdfimages", "-png", "-", prefix)
+	img, err := png.Decode(bytes.NewReader(readFixture(t, prefix+"-000.png")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	bounds := img.Bounds()
+	y := bounds.Min.Y + bounds.Dy()/2
+	var runs []int
+	var lastBlack bool
+	for x := bounds.Min.X; x < bounds.Max.X; x++ {
+		r, _, _, _ := img.At(x, y).RGBA()
+		black := r < 0x8000
+		if black != lastBlack {
+			runs = append(runs, 0)
+			lastBlack = black
+		}
+		if len(runs) > 0 {
+			runs[len(runs)-1]++
+		}
+	}
+	if len(runs) == 0 {
+		t.Fatal("barcode image has no bars")
+	}
+	if !lastBlack {
+		runs = runs[:len(runs)-1]
+	}
+	unit := slices.Min(runs)
+	var widths strings.Builder
+	for _, run := range runs {
+		if run%unit != 0 || run/unit > 4 {
+			t.Fatalf("unexpected bar or space width %d for a %d-pixel module", run, unit)
+		}
+		widths.WriteByte('0' + byte(run/unit))
+	}
+	return widths.String()
 }
 
 func TestGenerateUnicodeText(t *testing.T) {
@@ -231,9 +447,9 @@ func TestGenerateUnicodeText(t *testing.T) {
 		})
 	}
 
+	font := "data:font/ttf;base64," + base64.StdEncoding.EncodeToString(goregular.TTF)
+	fonts := fmt.Sprintf(`{"Helvetica":{"url":%q}}`, font)
 	t.Run("embedded TrueType font", func(t *testing.T) {
-		font := "data:font/ttf;base64," + base64.StdEncoding.EncodeToString(goregular.TTF)
-		fonts := fmt.Sprintf(`{"Helvetica":{"url":%q}}`, font)
 		pdf, err := generate(`{"textMode":"windows-1252"}`, fonts, name)
 		if err != nil {
 			t.Fatal(err)
@@ -241,6 +457,13 @@ func TestGenerateUnicodeText(t *testing.T) {
 		text := poppler(t, pdf, "pdftotext", "-enc", "UTF-8", "-", "-")
 		if got := strings.TrimSpace(string(text)); got != name {
 			t.Fatalf("rendered name = %q, want %q", got, name)
+		}
+	})
+
+	t.Run("embedded font missing check mark", func(t *testing.T) {
+		pdf, err := generate("{}", fonts, "Verified ✓")
+		if pdf != nil || err == nil || !strings.Contains(err.Error(), `band "title" element "name"`) || !strings.Contains(err.Error(), "U+2713") {
+			t.Fatalf("Generate returned %d bytes and %v, want nil PDF and an error identifying the field and missing U+2713", len(pdf), err)
 		}
 	})
 

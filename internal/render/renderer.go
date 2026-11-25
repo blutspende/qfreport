@@ -55,7 +55,10 @@ type renderer struct {
 	contentTop    float64
 	contentY      float64
 	contentBottom float64
-	customFonts   map[FontName]bool
+	headers       []Band // Page and column headers with their child bands, from the top margin down.
+	footers       []Band // Column and page footers with their child bands, from the content bottom down.
+	flow          []Band // All other bands in template order.
+	customFonts   map[FontName]*sfnt.Font
 	bundledFonts  map[string]*sfnt.Font
 	data          map[string][]map[string]string // All rows per source in input order, with display text keyed by column.
 	countingPages bool
@@ -133,7 +136,7 @@ func newRenderer(report Report, data map[string][]map[string]string) (*renderer,
 		pdf:         pdf,
 		scale:       scale,
 		textMode:    TextModeUnicode,
-		customFonts: make(map[FontName]bool),
+		customFonts: make(map[FontName]*sfnt.Font),
 		data:        data,
 	}
 	if defaults := report.Defaults; defaults != nil && defaults.TextMode != "" {
@@ -144,12 +147,21 @@ func newRenderer(report Report, data map[string][]map[string]string) (*renderer,
 	}
 	r.contentTop = r.u(report.Page.Margin.Top)
 	r.contentBottom = height - r.u(report.Page.Margin.Bottom)
+	var kind BandKind
 	for _, band := range report.Bands {
-		switch band.Kind {
+		// A child band belongs to the band it follows.
+		if band.Kind != BandChild {
+			kind = band.Kind
+		}
+		switch kind {
 		case BandPageHeader, BandColumnHeader:
+			r.headers = append(r.headers, band)
 			r.contentTop += r.u(band.Height)
 		case BandPageFooter, BandColumnFooter:
+			r.footers = append(r.footers, band)
 			r.contentBottom -= r.u(band.Height)
+		default:
+			r.flow = append(r.flow, band)
 		}
 	}
 	if r.contentTop > r.contentBottom+pageFitTolerance {
@@ -176,15 +188,7 @@ func (r *renderer) render() error {
 		return err
 	}
 
-	bands := make([]Band, 0, len(r.report.Bands))
-	for _, band := range r.report.Bands {
-		switch band.Kind {
-		case BandPageHeader, BandColumnHeader, BandPageFooter, BandColumnFooter:
-			continue
-		}
-		bands = append(bands, band)
-	}
-
+	bands := r.flow
 	for len(bands) > 0 {
 		count, source, grouping := dataBandSection(bands)
 		section := bands[:count]
@@ -216,13 +220,25 @@ func (r *renderer) renderDataBands(bands []Band, source string, rows []map[strin
 		return nil
 	}
 	ctx := cloneContext(base)
-	for _, band := range bands {
-		bandRows := rows
-		if band.Kind != BandDetail {
-			bandRows = rows[:1]
-		}
-		for _, row := range bandRows {
-			ctx[source] = row
+	for i, row := range rows {
+		ctx[source] = row
+		var kind BandKind
+		for _, band := range bands {
+			// A child band prints whenever the band it follows prints.
+			if band.Kind != BandChild {
+				kind = band.Kind
+			}
+			switch kind {
+			case BandGroupHeader:
+				if i != 0 {
+					continue
+				}
+			case BandGroupFooter:
+				if i != len(rows)-1 {
+					continue
+				}
+				ctx[source] = rows[0]
+			}
 			if err := r.renderFlowBand(band, ctx); err != nil {
 				return err
 			}
@@ -240,23 +256,19 @@ func (r *renderer) addPage(ctx renderContext) error {
 	r.pdf.AddPage()
 
 	headerY := r.u(r.report.Page.Margin.Top)
-	for _, band := range r.report.Bands {
-		if band.Kind == BandPageHeader || band.Kind == BandColumnHeader {
-			if err := r.renderBandAt(band, headerY, ctx); err != nil {
-				return err
-			}
-			headerY += r.u(band.Height)
+	for _, band := range r.headers {
+		if err := r.renderBandAt(band, headerY, ctx); err != nil {
+			return err
 		}
+		headerY += r.u(band.Height)
 	}
 
 	footerY := r.contentBottom
-	for _, band := range r.report.Bands {
-		if band.Kind == BandColumnFooter || band.Kind == BandPageFooter {
-			if err := r.renderBandAt(band, footerY, ctx); err != nil {
-				return err
-			}
-			footerY += r.u(band.Height)
+	for _, band := range r.footers {
+		if err := r.renderBandAt(band, footerY, ctx); err != nil {
+			return err
 		}
+		footerY += r.u(band.Height)
 	}
 	return nil
 }
@@ -342,14 +354,11 @@ func (r *renderer) elementText(element Element, ctx renderContext) string {
 func (r *renderer) renderText(element Element, x, y, w, h float64, ctx renderContext) error {
 	text := r.elementText(element, ctx)
 
-	font, unicodeFont := r.fontFamily(element.Style.Font)
 	size := r.fontSize(element.Style)
 	style := fontStyle(element.Style)
-	if !unicodeFont && r.textMode != TextModeWindows1252 {
-		if err := r.useBundledFont(style, text); err != nil {
-			return err
-		}
-		font, unicodeFont = bundledFontFamily, true
+	font, unicodeFont, err := r.textFont(element.Style.Font, style, text)
+	if err != nil {
+		return err
 	}
 	if !unicodeFont {
 		var encoded strings.Builder
@@ -568,7 +577,10 @@ func (r *renderer) useBundledFont(style, text string) error {
 		}
 		r.bundledFonts[face] = font
 	}
+	return validateGlyphs(font, "bundled Go font", text)
+}
 
+func validateGlyphs(font *sfnt.Font, name, text string) error {
 	var buffer sfnt.Buffer
 	for _, ch := range text {
 		switch ch {
@@ -577,10 +589,10 @@ func (r *renderer) useBundledFont(style, text string) error {
 		}
 		glyph, err := font.GlyphIndex(&buffer, ch)
 		if err != nil {
-			return fmt.Errorf("look up bundled Go font glyph %U: %w", ch, err)
+			return fmt.Errorf("look up %s glyph %U: %w", name, ch, err)
 		}
 		if glyph == 0 {
-			return fmt.Errorf("bundled Go font cannot render %U", ch)
+			return fmt.Errorf("%s cannot render %U", name, ch)
 		}
 	}
 	return nil
@@ -600,7 +612,8 @@ func (r *renderer) loadFonts() error {
 		if !bytes.HasPrefix(data, []byte{0, 1, 0, 0}) && !bytes.HasPrefix(data, []byte("true")) {
 			return fmt.Errorf("font %q: expected embedded TrueType font data", name)
 		}
-		if _, err := sfnt.Parse(data); err != nil {
+		font, err := sfnt.Parse(data)
+		if err != nil {
 			return fmt.Errorf("parse TrueType font %q: %w", name, err)
 		}
 		// A private family name prevents a failed registration from silently
@@ -613,7 +626,7 @@ func (r *renderer) loadFonts() error {
 				return fmt.Errorf("register TrueType font %q: %w", name, err)
 			}
 		}
-		r.customFonts[FontName(name)] = true
+		r.customFonts[FontName(name)] = font
 	}
 	return nil
 }
@@ -724,6 +737,10 @@ func dataBandSection(bands []Band) (count int, source string, grouping *Band) {
 				grouping = band
 			}
 			count++
+			// Child bands print with the band they follow.
+			for count < len(bands) && bands[count].Kind == BandChild {
+				count++
+			}
 		}
 	}
 	return count, source, grouping
@@ -826,21 +843,24 @@ func (r *renderer) textLines(text string, width float64, wrap, custom bool) []st
 	return result
 }
 
-func (r *renderer) fontFamily(name FontName) (string, bool) {
+func (r *renderer) textFont(name FontName, style, text string) (string, bool, error) {
 	if name == "" && r.report.Defaults != nil {
 		name = r.report.Defaults.Font
 	}
-	if r.customFonts[name] {
-		return "embedded-" + string(name), true
+	if font := r.customFonts[name]; font != nil {
+		return "embedded-" + string(name), true, validateGlyphs(font, "embedded font "+string(name), text)
+	}
+	if r.textMode != TextModeWindows1252 {
+		return bundledFontFamily, true, r.useBundledFont(style, text)
 	}
 	value := strings.ToLower(string(name))
 	if strings.Contains(value, "courier") || strings.Contains(value, "consolas") || strings.Contains(value, "mono") || strings.Contains(value, "code") {
-		return "Courier", false
+		return "Courier", false, nil
 	}
 	if strings.Contains(value, "times") || strings.Contains(value, "georgia") || strings.Contains(value, "garamond") || strings.Contains(value, "serif") || strings.Contains(value, "merriweather") || strings.Contains(value, "lora") || strings.Contains(value, "playfair") {
-		return "Times", false
+		return "Times", false, nil
 	}
-	return "Helvetica", false
+	return "Helvetica", false, nil
 }
 
 func (r *renderer) fontSize(style Style) float64 {
@@ -1095,10 +1115,7 @@ func encodeEANSupplement(content string, digits int) (barcode.Barcode, error) {
 }
 
 func encodeMSI(kind BarcodeType, content string) (barcode.Barcode, error) {
-	if content == "" {
-		return nil, fmt.Errorf("MSI requires digits")
-	}
-	if _, err := strconv.Atoi(content); err != nil {
+	if content == "" || strings.Trim(content, "0123456789") != "" {
 		return nil, fmt.Errorf("MSI requires digits")
 	}
 	switch kind {
@@ -1113,19 +1130,20 @@ func encodeMSI(kind BarcodeType, content string) (barcode.Barcode, error) {
 		content += msiMod11(content)
 		content += strconv.Itoa(msiMod10(content))
 	}
-	bits := "110"
+	var bits strings.Builder
+	bits.WriteString("110")
 	for _, digit := range content {
 		value := int(digit - '0')
 		for bit := 3; bit >= 0; bit-- {
 			if value&(1<<bit) != 0 {
-				bits += "110"
+				bits.WriteString("110")
 			} else {
-				bits += "100"
+				bits.WriteString("100")
 			}
 		}
 	}
-	bits += "1001"
-	return barcodeFromBitString(content, "MSI", bits), nil
+	bits.WriteString("1001")
+	return barcodeFromBitString(content, "MSI", bits.String()), nil
 }
 
 func msiMod10(content string) int {

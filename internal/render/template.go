@@ -72,10 +72,19 @@ func validateTemplate(report Report) error {
 		}
 		columns[name] = fields
 	}
+	var parent *Band // The band that a child band follows.
 	for i, band := range report.Bands {
 		path := fmt.Sprintf("template.bands[%d]", i)
 		if band.DataSource != nil && columns[*band.DataSource] == nil {
 			return fmt.Errorf("%s.dataSource: unknown source %q", path, *band.DataSource)
+		}
+		switch {
+		case band.Kind != BandChild:
+			parent = &report.Bands[i]
+		case parent == nil:
+			return fmt.Errorf("%s.kind: a child band must follow another band", path)
+		case band.DataSource != nil && *band.DataSource != bandDataSource(*parent):
+			return fmt.Errorf("%s.dataSource: source %q differs from band %q, which the child band follows", path, *band.DataSource, parent.ID)
 		}
 		if band.GroupExpr != nil {
 			if err := columns.checkText(path+".groupExpr", *band.GroupExpr); err != nil {
